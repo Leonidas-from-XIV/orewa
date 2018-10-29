@@ -1,0 +1,4 @@
+(library
+  (name orewa)
+  (public_name orewa)
+  (libraries core async))
