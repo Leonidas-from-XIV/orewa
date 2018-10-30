@@ -1,0 +1,9 @@
+(executable
+ (name integration)
+ (preprocess (pps ppx_let))
+ (libraries alcotest alcotest-async core async))
+
+(alias
+ (name runtest)
+ (deps (:test integration.exe))
+ (action (run %{test})))

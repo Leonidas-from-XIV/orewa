@@ -1,4 +1,5 @@
 (library
   (name orewa)
   (public_name orewa)
-  (libraries core async))
+  (libraries core async)
+  (preprocess (pps ppx_let)))
