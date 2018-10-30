@@ -1,6 +1,8 @@
 open Core
 open Async
 
+module Resp = Resp
+
 type t = {
   reader : Reader.t;
   writer : Writer.t;
@@ -25,6 +27,18 @@ let handle_chunk iobuf =
       return @@ `Stop parsed
     | None ->
       return @@ `Continue)
+  | '$' ->
+    (match crlf_ends_at iobuf with
+    | Some end_index ->
+      let length_read = Iobuf.Consume.stringo ~len:(Int.succ end_index) iobuf in
+      let length = Scanf.sscanf length_read "$%d\r\n" Fn.id in
+      Log.Global.error "LEN %d" length;
+      let content = Iobuf.Consume.stringo ~len:length iobuf in
+      let _garbage = Iobuf.Consume.stringo ~len:2 iobuf in
+      Log.Global.error "CONTENT: %s" content;
+      return @@ `Stop (Resp.Bulk content)
+    | None ->
+      return `Continue)
   | _ -> return @@ `Stop Resp.Null
 
 let read_resp reader =
@@ -34,10 +48,17 @@ let read_resp reader =
   | `Stopped v -> return @@ Ok v
   | `Eof_with_unconsumed_data _data -> return @@ Error `Connection_closed
 
-let get { reader; writer } key =
-  let request = Resp.Array [Resp.Bulk "GET"; Resp.Bulk key] in
+let echo { reader; writer } message =
+  let request = Resp.Array [Resp.Bulk "ECHO"; Resp.Bulk message] in
   let request = Resp.encode request in
   Writer.write writer request;
-  match%bind Reader.read_line reader with
-  | `Ok s -> return @@ Ok s
-  | `Eof -> return @@ Error `Eof
+  read_resp reader
+
+let init reader writer =
+  { reader; writer }
+
+let connect ?(port=6379) ~host f =
+  let where = Tcp.Where_to_connect.of_host_and_port @@ Host_and_port.create ~host ~port  in
+  Tcp.with_connection where @@ fun _socket reader writer ->
+    let t = init reader writer in
+    f t

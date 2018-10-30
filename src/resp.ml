@@ -1,7 +1,7 @@
 open Core
 open Async
 
-type redis_error = string
+type redis_error = string [@@deriving show, eq]
 
 let crlf = "\r\n"
 
@@ -12,6 +12,7 @@ type t =
   | Bulk of string
   | Array of t list
   | Null
+  [@@deriving show, eq]
 
 let terminator = function
   | true -> crlf

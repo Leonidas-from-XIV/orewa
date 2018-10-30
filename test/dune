@@ -1,7 +1,7 @@
 (executable
  (name integration)
  (preprocess (pps ppx_let))
- (libraries alcotest alcotest-async core async))
+ (libraries alcotest alcotest-async core async orewa))
 
 (alias
  (name runtest)
