@@ -13,11 +13,54 @@ let test_echo () =
       Alcotest.(check resp) "Correct response" (Orewa.Resp.Bulk message) response;
       return ()
     | Error _ ->
-      Alcotest.(check bool) "Did not get response" true false;
+      Alcotest.(check bool) "Did not get desired response" true false;
+      return ()
+
+let test_set () =
+  Orewa.connect ~host @@ fun conn ->
+    match%bind Orewa.set conn ~key:"key" "value" with
+    | Ok () ->
+      Alcotest.(check unit) "Correct response" () ();
+      return ()
+    | Error _ ->
+      Alcotest.(check bool) "Did not get desired response" true false;
+      return ()
+
+let test_set_get () =
+  Orewa.connect ~host @@ fun conn ->
+    let key = "key" in
+    let value = "value" in
+    match%bind Orewa.set conn ~key value with
+    | Error _ ->
+      Alcotest.(check bool) "Did not get desired response" true false;
+      return ()
+    | Ok () ->
+      let%bind res = Orewa.get conn key in
+      match res with
+      | Error _ ->
+        Alcotest.(check bool) "Did not get desired response" true false;
+        return ()
+      | Ok res ->
+        Alcotest.(check resp) "Correct response" (Orewa.Resp.Bulk value) res;
+        return ()
+
+let test_lpush () =
+  Orewa.connect ~host @@ fun conn ->
+    let key = "list" in
+    let value = Orewa.Resp.Bulk "value" in
+    match%bind Orewa.lpush conn ~key value with
+    | Error _ ->
+      Alcotest.(check bool) "Did not get desired response" true false;
+      return ()
+    | Ok length ->
+      Alcotest.(check int) "Did not get desired length" 1 length;
       return ()
 
 let test_set = [
-  Alcotest_async.test_case "ECHO" `Quick test_echo;
+  Alcotest_async.test_case "ECHO" `Slow test_echo;
+  Alcotest_async.test_case "SET" `Slow test_set;
+  Alcotest_async.test_case "SET+GET" `Slow test_set_get;
+  Alcotest_async.test_case "LPUSH" `Slow test_lpush;
 ]
 
 let () =

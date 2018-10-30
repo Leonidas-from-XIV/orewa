@@ -31,9 +31,3 @@ let rec encode = function
     Printf.sprintf "*%d%s%s%s" len crlf payload crlf
   | Null ->
     Printf.sprintf "$-1%s" crlf
-
-let decode s =
-  let type' = s.[0] in
-  match type' with
-  | '+' -> String "foo"
-  | _ -> String "bar"
