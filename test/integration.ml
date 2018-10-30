@@ -84,7 +84,7 @@ let test_lpush_lrange () =
         Alcotest.(check bool) "Did not get desired response" true false;
         return ()
       | Ok res ->
-        Alcotest.(check resp) "Correct response" (Orewa.Resp.Array [Orewa.Resp.Bulk value]) res;
+        Alcotest.(check (list string)) "Correct response" [value] res;
         return ()
 
 let test_set = [

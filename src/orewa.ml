@@ -114,8 +114,16 @@ let lpush { reader; writer } ~key value =
   | _ -> Deferred.return @@ Error `Unexpected
 
 let lrange { reader; writer } ~key ~start ~stop =
+  let open Deferred.Result.Let_syntax in
   submit_request writer ["LRANGE"; key; string_of_int start; string_of_int stop];
-  read_resp reader
+  match%bind read_resp reader with
+  | Resp.Array xs ->
+    List.map xs ~f:(function
+      | Resp.Bulk v -> Ok v
+      | _ -> Error `Unexpected)
+    |> Result.all
+    |> Deferred.return
+  | _ -> Deferred.return @@ Error `Unexpected
 
 let init reader writer =
   { reader; writer }
