@@ -1,5 +1,7 @@
 language: c
 sudo: required
+services:
+  - redis-server
 install:
   - wget https://raw.githubusercontent.com/ocaml/ocaml-ci-scripts/master/.travis-opam.sh
   - if [ -n "$COVERAGE" ]; then wget https://raw.githubusercontent.com/simonjbeaumont/ocaml-travis-coveralls/master/travis-coveralls.sh; fi
