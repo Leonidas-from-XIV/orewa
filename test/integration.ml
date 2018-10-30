@@ -47,7 +47,7 @@ let test_set_get () =
 let test_lpush () =
   Orewa.connect ~host @@ fun conn ->
     let key = "list" in
-    let value = Orewa.Resp.Bulk "value" in
+    let value = "value" in
     match%bind Orewa.lpush conn ~key value with
     | Error _ ->
       Alcotest.(check bool) "Did not get desired response" true false;
@@ -56,11 +56,29 @@ let test_lpush () =
       Alcotest.(check int) "Did not get desired length" 1 length;
       return ()
 
+let test_lpush_lrange () =
+  Orewa.connect ~host @@ fun conn ->
+    let key = "list" in
+    let value = "value" in
+    match%bind Orewa.lpush conn ~key value with
+    | Error _ ->
+      Alcotest.(check bool) "Did not get desired response" true false;
+      return ()
+    | Ok _ ->
+      match%bind Orewa.lrange conn ~key ~start:0 ~stop:(-1) with
+      | Error _ ->
+        Alcotest.(check bool) "Did not get desired response" true false;
+        return ()
+      | Ok res ->
+        Alcotest.(check resp) "Correct response" (Orewa.Resp.Array [Orewa.Resp.Bulk value]) res;
+        return ()
+
 let test_set = [
   Alcotest_async.test_case "ECHO" `Slow test_echo;
   Alcotest_async.test_case "SET" `Slow test_set;
-  Alcotest_async.test_case "SET+GET" `Slow test_set_get;
-  Alcotest_async.test_case "LPUSH" `Slow test_lpush;
+  Alcotest_async.test_case "GET" `Slow test_set_get;
+  (* Alcotest_async.test_case "LPUSH" `Slow test_lpush; *)
+  Alcotest_async.test_case "LRANGE" `Slow test_lpush_lrange;
 ]
 
 let () =
