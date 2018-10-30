@@ -19,11 +19,11 @@ let consume_record ~len iobuf =
   Iobuf.Consume.stringo ~len iobuf
   |> String.subo ~len:(len - 2)
 
-let handle_chunk iobuf =
+let rec handle_chunk iobuf =
   let type' = Iobuf.Consume.char iobuf in
-  Log.Global.error "type': %c" type';
   match type' with
   | '+' ->
+    (* Simple string *)
     (match record_length iobuf with
     | Some len ->
       let content = consume_record ~len iobuf in
@@ -32,6 +32,7 @@ let handle_chunk iobuf =
     | None ->
       return @@ `Continue)
   | '-' ->
+    (* Error, which is also a simple string *)
     (match record_length iobuf with
     | Some len ->
       let content = consume_record ~len iobuf in
@@ -40,23 +41,47 @@ let handle_chunk iobuf =
     | None ->
       return @@ `Continue)
   | '$' ->
+    (* Bulk string *)
     (match record_length iobuf with
     | Some len ->
-      let length = consume_record ~len iobuf |> int_of_string in
-      Log.Global.error "LEN %d" length;
-      let content = Iobuf.Consume.stringo ~len:length iobuf in
-      Log.Global.error "CONTENT: %s" content;
+      let len = consume_record ~len iobuf |> int_of_string in
+      Log.Global.error "LEN %d" len;
+      (* read trailing \r\n and discard *)
+      let content = consume_record ~len:(len + 2) iobuf in
+      Log.Global.error "CONTENT: '%s'" (String.escaped content);
       return @@ `Stop (Resp.Bulk content)
     | None ->
       return `Continue)
   | ':' ->
+    (* Integer *)
     (match record_length iobuf with
     | Some len ->
-      let elements = consume_record ~len iobuf |> int_of_string in
-      return @@ `Stop (Resp.Integer elements)
+      let value = consume_record ~len iobuf |> int_of_string in
+      return @@ `Stop (Resp.Integer value)
     | None ->
       return `Continue)
-  | _ -> return @@ `Stop Resp.Null
+  | '*' ->
+    (* Array *)
+    (match record_length iobuf with
+    | Some len ->
+      (let elements = consume_record ~len iobuf |> int_of_string in
+      Log.Global.error "ELEMENTS TO READ: %d" elements;
+      let rec loop xs = function
+        | 0 -> return @@ `Stop xs
+        | remaining ->
+          match%bind handle_chunk iobuf with
+          | `Stop parsed -> loop (parsed::xs) (Int.pred remaining)
+          | `Continue -> return `Continue
+      in
+      match%bind loop [] elements with
+      | `Continue -> return `Continue
+      | `Stop xs -> return @@ `Stop (Resp.Array xs))
+    | None ->
+      return `Continue)
+  | unknown ->
+    (* Unknown match *)
+    Log.Global.error "Unparseable type tag %C" unknown;
+    return @@ `Stop Resp.Null
 
 let read_resp reader =
   let%bind res = Reader.read_one_iobuf_at_a_time reader ~handle_chunk in
