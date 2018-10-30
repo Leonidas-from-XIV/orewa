@@ -24,26 +24,29 @@ let consume_record ~len iobuf =
   Iobuf.Consume.stringo ~len iobuf
   |> String.subo ~len:(len - 2)
 
+let discard_prefix =
+  String.subo ~pos:1
+
 let rec handle_chunk iobuf =
-  (* if `Continue is called we need to preserve the prefix *)
-  let type' = Iobuf.Consume.char iobuf in
-  match type' with
+  (* peek, because if `Continue is returned we need to preserve the prefix and
+   * don't consume it *)
+  match Iobuf.Peek.char ~pos:0 iobuf with
   | '+' ->
     (* Simple string *)
     (if_record iobuf @@ fun len ->
-      let content = consume_record ~len iobuf in
+      let content = consume_record ~len iobuf |> discard_prefix in
       Log.Global.error "READ: %s" (String.escaped content);
       return @@ `Stop (Resp.String content))
   | '-' ->
     (* Error, which is also a simple string *)
     (if_record iobuf @@ fun len ->
-      let content = consume_record ~len iobuf in
+      let content = consume_record ~len iobuf |> discard_prefix in
       Log.Global.error "READ: %s" (String.escaped content);
       return @@ `Stop (Resp.Error content))
   | '$' ->
     (* Bulk string *)
     (if_record iobuf @@ fun len ->
-      let len = consume_record ~len iobuf |> int_of_string in
+      let len = consume_record ~len iobuf |> discard_prefix |> int_of_string in
       Log.Global.error "LEN %d" len;
       (* read trailing \r\n and discard *)
       let content = consume_record ~len:(len + 2) iobuf in
@@ -52,7 +55,7 @@ let rec handle_chunk iobuf =
   | ':' ->
     (* Integer *)
     (if_record iobuf @@ fun len ->
-      let value = consume_record ~len iobuf |> int_of_string in
+      let value = consume_record ~len iobuf |> discard_prefix |> int_of_string in
       return @@ `Stop (Resp.Integer value))
   | '*' ->
     (* Array *)
@@ -60,7 +63,7 @@ let rec handle_chunk iobuf =
       (* There is a good chance that if one of the calls emits `Continue the
        * code will be incorrect, since we consumed from the iobuf but discard
        * whatever we have consumed and parsed so far by emitting `Continue *)
-      (let elements = consume_record ~len iobuf |> int_of_string in
+      (let elements = consume_record ~len iobuf |> discard_prefix |> int_of_string in
       Log.Global.error "ELEMENTS TO READ: %d" elements;
       let rec loop xs = function
         | 0 -> return @@ `Stop xs
