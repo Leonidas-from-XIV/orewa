@@ -6,4 +6,4 @@
 (alias
  (name runtest)
  (deps (:test integration.exe))
- (action (run %{test})))
+ (action (run %{test} --color=always)))

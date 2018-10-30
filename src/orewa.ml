@@ -15,55 +15,51 @@ let record_length iobuf =
   | Some cr_index, Some lf_index when lf_index = Int.succ cr_index -> Some (Int.succ lf_index)
   | _ -> None
 
+let if_record iobuf f =
+  match record_length iobuf with
+  | None -> return `Continue
+  | Some len -> f len
+
 let consume_record ~len iobuf =
   Iobuf.Consume.stringo ~len iobuf
   |> String.subo ~len:(len - 2)
 
 let rec handle_chunk iobuf =
+  (* if `Continue is called we need to preserve the prefix *)
   let type' = Iobuf.Consume.char iobuf in
   match type' with
   | '+' ->
     (* Simple string *)
-    (match record_length iobuf with
-    | Some len ->
+    (if_record iobuf @@ fun len ->
       let content = consume_record ~len iobuf in
       Log.Global.error "READ: %s" (String.escaped content);
-      return @@ `Stop (Resp.String content)
-    | None ->
-      return @@ `Continue)
+      return @@ `Stop (Resp.String content))
   | '-' ->
     (* Error, which is also a simple string *)
-    (match record_length iobuf with
-    | Some len ->
+    (if_record iobuf @@ fun len ->
       let content = consume_record ~len iobuf in
       Log.Global.error "READ: %s" (String.escaped content);
-      return @@ `Stop (Resp.Error content)
-    | None ->
-      return @@ `Continue)
+      return @@ `Stop (Resp.Error content))
   | '$' ->
     (* Bulk string *)
-    (match record_length iobuf with
-    | Some len ->
+    (if_record iobuf @@ fun len ->
       let len = consume_record ~len iobuf |> int_of_string in
       Log.Global.error "LEN %d" len;
       (* read trailing \r\n and discard *)
       let content = consume_record ~len:(len + 2) iobuf in
       Log.Global.error "CONTENT: '%s'" (String.escaped content);
-      return @@ `Stop (Resp.Bulk content)
-    | None ->
-      return `Continue)
+      return @@ `Stop (Resp.Bulk content))
   | ':' ->
     (* Integer *)
-    (match record_length iobuf with
-    | Some len ->
+    (if_record iobuf @@ fun len ->
       let value = consume_record ~len iobuf |> int_of_string in
-      return @@ `Stop (Resp.Integer value)
-    | None ->
-      return `Continue)
+      return @@ `Stop (Resp.Integer value))
   | '*' ->
     (* Array *)
-    (match record_length iobuf with
-    | Some len ->
+    (if_record iobuf @@ fun len ->
+      (* There is a good chance that if one of the calls emits `Continue the
+       * code will be incorrect, since we consumed from the iobuf but discard
+       * whatever we have consumed and parsed so far by emitting `Continue *)
       (let elements = consume_record ~len iobuf |> int_of_string in
       Log.Global.error "ELEMENTS TO READ: %d" elements;
       let rec loop xs = function
@@ -75,9 +71,7 @@ let rec handle_chunk iobuf =
       in
       match%bind loop [] elements with
       | `Continue -> return `Continue
-      | `Stop xs -> return @@ `Stop (Resp.Array xs))
-    | None ->
-      return `Continue)
+      | `Stop xs -> return @@ `Stop (Resp.Array xs)))
   | unknown ->
     (* Unknown match *)
     Log.Global.error "Unparseable type tag %C" unknown;
