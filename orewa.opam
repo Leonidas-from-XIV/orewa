@@ -1,9 +1,9 @@
 opam-version: "2.0"
 maintainer: "Marek Kubica <marek@xivilization.net>"
 author: "Marek Kubica <marek@xivilization.net>"
-homepage: "https://github.com/Leonidas-from-XIV/ore-wa"
-dev-repo: "git+http://github.com/Leonidas-from-XIV/ore-wa.git"
-bug-reports: "https://github.com/Leonidas-from-XIV/ore-wa/issues"
+homepage: "https://github.com/Leonidas-from-XIV/orewa"
+dev-repo: "git+https://github.com/Leonidas-from-XIV/orewa.git"
+bug-reports: "https://github.com/Leonidas-from-XIV/orewa/issues"
 build: [["dune" "build" "-p" name "-j" jobs]]
 run-test: [["dune" "runtest" "-p" name "-j" jobs]]
 depends: [
