@@ -23,11 +23,11 @@ let discard_prefix =
   String.subo ~pos:1
 
 let rec handle_chunk iobuf =
-  (* peek, because if `Continue is returned we need to preserve the prefix and
-   * don't consume it *)
   match record_length iobuf with
   | None -> return `Continue
   | Some len ->
+    (* peek, because if `Continue is returned we need to preserve the prefix and
+     * don't consume it *)
     match Iobuf.Peek.char ~pos:0 iobuf with
     | '+' ->
       (* Simple string *)
