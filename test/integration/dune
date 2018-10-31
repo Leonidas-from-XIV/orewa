@@ -1,9 +1,9 @@
 (executable
- (name integration)
+ (name test)
  (preprocess (pps ppx_let))
  (libraries alcotest alcotest-async core async orewa))
 
 (alias
  (name runtest)
- (deps (:test integration.exe))
+ (deps (:test test.exe))
  (action (run %{test} --color=always)))
