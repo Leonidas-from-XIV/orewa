@@ -5,6 +5,17 @@ open Async
 
 let host = "localhost"
 
+module Orewa_error = struct
+  type t = [ `Connection_closed | `Eof | `Unexpected] [@@deriving show, eq]
+end
+
+let err = Alcotest.testable Orewa_error.pp Orewa_error.equal
+let resp = Alcotest.testable Orewa.Resp.pp Orewa.Resp.equal
+
+let re = Alcotest.(result resp err)
+let ue = Alcotest.(result unit err)
+let ie = Alcotest.(result int err)
+
 let random_state = Random.State.make_self_init ()
 let random_key () =
   let random_char _ =
@@ -16,76 +27,47 @@ let random_key () =
   let random_string = String.init 7 ~f:random_char in
   Printf.sprintf "redis-integration-%s" random_string
 
-let resp = Alcotest.testable Orewa.Resp.pp Orewa.Resp.equal
-
 let test_echo () =
   Orewa.connect ~host @@ fun conn ->
     let message = "Hello" in
-    match%bind Orewa.echo conn message with
-    | Ok response ->
-      Alcotest.(check resp) "Correct response" (Orewa.Resp.Bulk message) response;
-      return ()
-    | Error _ ->
-      Alcotest.(check bool) "Did not get desired response" true false;
-      return ()
+    let%bind response = Orewa.echo conn message in
+    Alcotest.(check re) "ECHO faulty" (Ok (Orewa.Resp.Bulk message)) response;
+    return ()
 
 let test_set () =
   Orewa.connect ~host @@ fun conn ->
     let key = random_key () in
-    match%bind Orewa.set conn ~key "value" with
-    | Ok () ->
-      Alcotest.(check unit) "Correct response" () ();
-      return ()
-    | Error _ ->
-      Alcotest.(check bool) "Did not get desired response" true false;
-      return ()
+    let%bind res = Orewa.set conn ~key "value" in
+    Alcotest.(check ue) "SET failed" (Ok ()) res;
+    return ()
 
 let test_set_get () =
   Orewa.connect ~host @@ fun conn ->
     let key = random_key () in
-    let value = "value" in
-    match%bind Orewa.set conn ~key value with
-    | Error _ ->
-      Alcotest.(check bool) "Did not get desired response" true false;
-      return ()
-    | Ok () ->
-      let%bind res = Orewa.get conn key in
-      match res with
-      | Error _ ->
-        Alcotest.(check bool) "Did not get desired response" true false;
-        return ()
-      | Ok res ->
-        Alcotest.(check resp) "Correct response" (Orewa.Resp.Bulk value) res;
-        return ()
+    let value = random_key () in
+    let%bind _ = Orewa.set conn ~key value in
+    let%bind res = Orewa.get conn key in
+    Alcotest.(check re) "Correct response" (Ok (Orewa.Resp.Bulk value)) res;
+    return ()
 
 let test_lpush () =
   Orewa.connect ~host @@ fun conn ->
     let key = random_key () in
     let value = "value" in
-    match%bind Orewa.lpush conn ~key value with
-    | Error _ ->
-      Alcotest.(check bool) "Did not get desired response" true false;
-      return ()
-    | Ok length ->
-      Alcotest.(check int) "Did not get desired length" 1 length;
-      return ()
+    let%bind res = Orewa.lpush conn ~key value in
+    Alcotest.(check ie) "LPUSH did not work" (Ok 1) res;
+    return ()
 
 let test_lpush_lrange () =
   Orewa.connect ~host @@ fun conn ->
     let key = random_key () in
-    let value = "value" in
-    match%bind Orewa.lpush conn ~key value with
-    | Error _ ->
-      Alcotest.(check bool) "Did not get desired response" true false;
-      return ()
-    | Ok _ ->
-      match%bind Orewa.lrange conn ~key ~start:0 ~stop:(-1) with
-      | Error _ ->
-        Alcotest.(check bool) "Did not get desired response" true false;
-        return ()
-      | Ok res ->
-        Alcotest.(check (list string)) "Correct response" [value] res;
-        return ()
+    let value = random_key () in
+    let value' = random_key () in
+    let%bind _ = Orewa.lpush conn ~key value in
+    let%bind _ = Orewa.lpush conn ~key value' in
+    let%bind res = Orewa.lrange conn ~key ~start:0 ~stop:(-1) in
+    Alcotest.(check (result (list string) err)) "LRANGE failed" (Ok [value'; value]) res;
+    return ()
 
 let test_set = [
   Alcotest_async.test_case "ECHO" `Slow test_echo;

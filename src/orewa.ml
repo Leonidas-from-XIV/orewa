@@ -19,53 +19,46 @@ let consume_record ~len iobuf =
   Iobuf.Consume.stringo ~len iobuf
   |> String.subo ~len:(len - 2)
 
-let peek_record ?(pos=0) ~len iobuf =
-  Iobuf.Peek.stringo ~len ~pos iobuf
-  |> String.subo ~len:(len - 2)
-
 let discard_prefix =
   String.subo ~pos:1
 
-type consume = int
+type nested_resp = | Element of Resp.t | Array of (int * nested_resp Stack.t)
 
-type elements = int
-
-type nested_resp = | Element of consume * Resp.t | Array of (elements * consume * nested_resp Stack.t)
+let show_nested_resp = function
+  | Element _ -> "Element(..)"
+  | Array (to_read, _) -> Printf.sprintf "Array[%d](..)" to_read
 
 let rec one_record_read stack e =
   match Stack.top stack with
   | None
   | Some Element _
-  | Some Array (_, 0, _) ->
+  | Some Array (0, _) ->
     Stack.push stack e
-  | Some Array (left_to_read, consume, inner_stack) ->
+  | Some Array (left_to_read, inner_stack) ->
     let _ = Stack.pop stack in
     one_record_read inner_stack e;
-    let appended = Array (Int.pred left_to_read, consume, inner_stack) in
+    let appended = Array (Int.pred left_to_read, inner_stack) in
     Stack.push stack appended
-
-let finished_array_read stack =
-  match Stack.top stack with
-  | Some Array (0, _, _) -> true
-  | _ -> false
 
 let rec unwind_stack stack =
   stack
   |> Stack.to_list
   |> List.map ~f:(function
-    | Element (_, resp) -> resp
-    | Array (_, _, stack) ->
-      Resp.Array (unwind_stack stack))
+    | Element resp -> resp
+    | Array (_, stack) ->
+      Resp.Array (List.rev (unwind_stack stack)))
 
-let rec advance_from_stack stack =
-  Stack.fold stack ~init:0 ~f:(fun consumed ->
-    function
-    | Element (consume, _) -> consume + consumed
-    | Array (_, consume, stack) ->
-      let consumed' = advance_from_stack stack in
-      consume + consumed' + consumed)
+let unfinished_array stack =
+  match Stack.top stack with
+  | Some Array (n, _) when n > 0 -> true
+  | _ -> false
 
 let rec handle_chunk stack iobuf =
+  let read_on stack =
+    match unfinished_array stack with
+    | true -> handle_chunk stack iobuf
+    | false -> return @@ `Stop ()
+  in
   match record_length iobuf with
   | None -> return `Continue
   | Some len ->
@@ -74,62 +67,44 @@ let rec handle_chunk stack iobuf =
     match Iobuf.Peek.char ~pos:0 iobuf with
     | '+' ->
       (* Simple string *)
-      let content = peek_record ~len iobuf |> discard_prefix in
+      let content = consume_record ~len iobuf |> discard_prefix in
       Log.Global.error "READ: %s" (String.escaped content);
       let resp = Resp.String content in
-      one_record_read stack (Element (len, resp));
-      Iobuf.advance iobuf (advance_from_stack stack);
-      Log.Global.error "LEN %d ADVANCE %d" len (advance_from_stack stack);
-      return @@ `Stop resp
+      one_record_read stack (Element resp);
+      read_on stack
     | '-' ->
       (* Error, which is also a simple string *)
-      let content = peek_record ~len iobuf |> discard_prefix in
+      let content = consume_record ~len iobuf |> discard_prefix in
       Log.Global.error "READ: %s" (String.escaped content);
       let resp = Resp.Error content in
-      one_record_read stack (Element (len, resp));
-      Iobuf.advance iobuf (advance_from_stack stack);
-      return @@ `Stop resp
+      one_record_read stack (Element resp);
+      read_on stack
     | '$' ->
       (* Bulk string *)
-      let bulk_len = peek_record ~len iobuf |> discard_prefix |> int_of_string in
+      let bulk_len = consume_record ~len iobuf |> discard_prefix |> int_of_string in
       Log.Global.error "LEN %d" bulk_len;
       (* read including the trailing \r\n and discard those *)
-      let content = peek_record ~len:(bulk_len + 2) ~pos:len iobuf in
-      let potentially_read = len + bulk_len + 2 in
+      let content = consume_record ~len:(bulk_len + 2) iobuf in
       Log.Global.error "CONTENT: '%s'" (String.escaped content);
       let resp = Resp.Bulk content in
-      one_record_read stack (Element (potentially_read, resp));
-      Iobuf.advance iobuf (advance_from_stack stack);
-      return @@ `Stop resp
+      one_record_read stack (Element resp);
+      read_on stack
     | ':' ->
       (* Integer *)
-      let value = peek_record ~len iobuf |> discard_prefix |> int_of_string in
+      let value = consume_record ~len iobuf |> discard_prefix |> int_of_string in
       let resp = Resp.Integer value in
-      one_record_read stack (Element (len, resp));
-      Iobuf.advance iobuf (advance_from_stack stack);
-      return @@ `Stop resp
+      one_record_read stack (Element resp);
+      read_on stack
     | '*' ->
       (* Array *)
-      (* There is a good chance that if one of the calls emits `Continue the
-       * code will be incorrect, since we consumed from the iobuf but discard
-       * whatever we have consumed and parsed so far by emitting `Continue *)
-        (let elements = peek_record ~len iobuf |> discard_prefix |> int_of_string in
-        Iobuf.advance iobuf len;
-        Log.Global.error "ELEMENTS TO READ: %d" elements;
-        let rec loop xs = function
-          | 0 -> return @@ `Stop xs
-          | remaining ->
-            match%bind handle_chunk stack iobuf with
-            | `Stop parsed -> loop (parsed::xs) (Int.pred remaining)
-            | `Continue -> return `Continue
-        in
-        match%bind loop [] elements with
-        | `Continue -> return `Continue
-        | `Stop xs -> return @@ `Stop (Resp.Array xs))
+      let elements = consume_record ~len iobuf |> discard_prefix |> int_of_string in
+      Log.Global.error "ELEMENTS TO READ: %d" elements;
+      one_record_read stack (Array (elements, Stack.create ()));
+      handle_chunk stack iobuf
     | unknown ->
       (* Unknown match *)
       Log.Global.error "Unparseable type tag %C" unknown;
-      return @@ `Stop Resp.Null
+      return @@ `Stop ()
 
 type resp_list = Resp.t list [@@deriving show]
 
@@ -138,10 +113,13 @@ let read_resp reader =
   let%bind res = Reader.read_one_iobuf_at_a_time reader ~handle_chunk:(handle_chunk stack) in
   let resps = unwind_stack stack in
   Log.Global.error "Stack unwound to: %s" (show_resp_list resps);
-  match res with
-  | `Eof -> return @@ Error `Eof
-  | `Stopped v -> return @@ Ok v
-  | `Eof_with_unconsumed_data _data -> return @@ Error `Connection_closed
+  match List.hd resps with
+  | None -> return @@ Error `Unexpected
+  | Some resp ->
+    match res with
+    | `Eof -> return @@ Error `Eof
+    | `Stopped () -> return @@ Ok resp
+    | `Eof_with_unconsumed_data _data -> return @@ Error `Connection_closed
 
 let construct_request commands =
   commands |> List.map ~f:(fun cmd -> Resp.Bulk cmd) |> (fun xs -> Resp.Array xs) |> Resp.encode
