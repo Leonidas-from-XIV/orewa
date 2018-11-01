@@ -19,8 +19,8 @@ let consume_record ~len iobuf =
   Iobuf.Consume.stringo ~len iobuf
   |> String.subo ~len:(len - 2)
 
-let peek_record ~len iobuf =
-  Iobuf.Peek.stringo ~len ~pos:0 iobuf
+let peek_record ?(pos=0) ~len iobuf =
+  Iobuf.Peek.stringo ~len ~pos iobuf
   |> String.subo ~len:(len - 2)
 
 let discard_prefix =
@@ -52,13 +52,18 @@ let finished_array_read stack =
 let rec unwind_stack stack =
   stack
   |> Stack.to_list
-  |> List.fold ~init:(0, []) ~f:(fun (consumed, unwound) ->
-      function
-      | Element (consume, resp) -> (consume + consumed, resp :: unwound)
-      | Array (_, consume, stack) ->
-        let consumed', unwound' = unwind_stack stack in
-        (consume + consumed' + consumed, (Resp.Array unwound')::unwound))
-  |> Tuple2.map_snd ~f:List.rev
+  |> List.map ~f:(function
+    | Element (_, resp) -> resp
+    | Array (_, _, stack) ->
+      Resp.Array (unwind_stack stack))
+
+let rec advance_from_stack stack =
+  Stack.fold stack ~init:0 ~f:(fun consumed ->
+    function
+    | Element (consume, _) -> consume + consumed
+    | Array (_, consume, stack) ->
+      let consumed' = advance_from_stack stack in
+      consume + consumed' + consumed)
 
 let rec handle_chunk stack iobuf =
   match record_length iobuf with
@@ -71,33 +76,45 @@ let rec handle_chunk stack iobuf =
       (* Simple string *)
       let content = peek_record ~len iobuf |> discard_prefix in
       Log.Global.error "READ: %s" (String.escaped content);
-      Iobuf.advance iobuf len;
       let resp = Resp.String content in
       one_record_read stack (Element (len, resp));
+      Iobuf.advance iobuf (advance_from_stack stack);
+      Log.Global.error "LEN %d ADVANCE %d" len (advance_from_stack stack);
       return @@ `Stop resp
     | '-' ->
       (* Error, which is also a simple string *)
-      let content = consume_record ~len iobuf |> discard_prefix in
+      let content = peek_record ~len iobuf |> discard_prefix in
       Log.Global.error "READ: %s" (String.escaped content);
-      return @@ `Stop (Resp.Error content)
+      let resp = Resp.Error content in
+      one_record_read stack (Element (len, resp));
+      Iobuf.advance iobuf (advance_from_stack stack);
+      return @@ `Stop resp
     | '$' ->
       (* Bulk string *)
-      let len = consume_record ~len iobuf |> discard_prefix |> int_of_string in
-      Log.Global.error "LEN %d" len;
-      (* read trailing \r\n and discard *)
-      let content = consume_record ~len:(len + 2) iobuf in
+      let bulk_len = peek_record ~len iobuf |> discard_prefix |> int_of_string in
+      Log.Global.error "LEN %d" bulk_len;
+      (* read including the trailing \r\n and discard those *)
+      let content = peek_record ~len:(bulk_len + 2) ~pos:len iobuf in
+      let potentially_read = len + bulk_len + 2 in
       Log.Global.error "CONTENT: '%s'" (String.escaped content);
-      return @@ `Stop (Resp.Bulk content)
+      let resp = Resp.Bulk content in
+      one_record_read stack (Element (potentially_read, resp));
+      Iobuf.advance iobuf (advance_from_stack stack);
+      return @@ `Stop resp
     | ':' ->
       (* Integer *)
-      let value = consume_record ~len iobuf |> discard_prefix |> int_of_string in
-      return @@ `Stop (Resp.Integer value)
+      let value = peek_record ~len iobuf |> discard_prefix |> int_of_string in
+      let resp = Resp.Integer value in
+      one_record_read stack (Element (len, resp));
+      Iobuf.advance iobuf (advance_from_stack stack);
+      return @@ `Stop resp
     | '*' ->
       (* Array *)
       (* There is a good chance that if one of the calls emits `Continue the
        * code will be incorrect, since we consumed from the iobuf but discard
        * whatever we have consumed and parsed so far by emitting `Continue *)
-        (let elements = consume_record ~len iobuf |> discard_prefix |> int_of_string in
+        (let elements = peek_record ~len iobuf |> discard_prefix |> int_of_string in
+        Iobuf.advance iobuf len;
         Log.Global.error "ELEMENTS TO READ: %d" elements;
         let rec loop xs = function
           | 0 -> return @@ `Stop xs
@@ -119,8 +136,8 @@ type resp_list = Resp.t list [@@deriving show]
 let read_resp reader =
   let stack = Stack.create () in
   let%bind res = Reader.read_one_iobuf_at_a_time reader ~handle_chunk:(handle_chunk stack) in
-  let consume, resps = unwind_stack stack in
-  Log.Global.error "Consume %d from Iobuf, show %s" consume (show_resp_list resps);
+  let resps = unwind_stack stack in
+  Log.Global.error "Stack unwound to: %s" (show_resp_list resps);
   match res with
   | `Eof -> return @@ Error `Eof
   | `Stopped v -> return @@ Ok v
