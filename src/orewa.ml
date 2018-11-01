@@ -19,6 +19,10 @@ let consume_record ~len iobuf =
   Iobuf.Consume.stringo ~len iobuf
   |> String.subo ~len:(len - 2)
 
+let peek_record ~len iobuf =
+  Iobuf.Peek.stringo ~len ~pos:0 iobuf
+  |> String.subo ~len:(len - 2)
+
 let discard_prefix =
   String.subo ~pos:1
 
@@ -65,9 +69,12 @@ let rec handle_chunk stack iobuf =
     match Iobuf.Peek.char ~pos:0 iobuf with
     | '+' ->
       (* Simple string *)
-      let content = consume_record ~len iobuf |> discard_prefix in
+      let content = peek_record ~len iobuf |> discard_prefix in
       Log.Global.error "READ: %s" (String.escaped content);
-      return @@ `Stop (Resp.String content)
+      Iobuf.advance iobuf len;
+      let resp = Resp.String content in
+      one_record_read stack (Element (len, resp));
+      return @@ `Stop resp
     | '-' ->
       (* Error, which is also a simple string *)
       let content = consume_record ~len iobuf |> discard_prefix in
@@ -107,9 +114,13 @@ let rec handle_chunk stack iobuf =
       Log.Global.error "Unparseable type tag %C" unknown;
       return @@ `Stop Resp.Null
 
+type resp_list = Resp.t list [@@deriving show]
+
 let read_resp reader =
   let stack = Stack.create () in
   let%bind res = Reader.read_one_iobuf_at_a_time reader ~handle_chunk:(handle_chunk stack) in
+  let consume, resps = unwind_stack stack in
+  Log.Global.error "Consume %d from Iobuf, show %s" consume (show_resp_list resps);
   match res with
   | `Eof -> return @@ Error `Eof
   | `Stopped v -> return @@ Ok v
