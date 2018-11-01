@@ -22,7 +22,41 @@ let consume_record ~len iobuf =
 let discard_prefix =
   String.subo ~pos:1
 
-let rec handle_chunk iobuf =
+type consume = int
+
+type elements = int
+
+type nested_resp = | Element of consume * Resp.t | Array of (elements * consume * nested_resp Stack.t)
+
+let rec one_record_read stack e =
+  match Stack.top stack with
+  | None
+  | Some Element _
+  | Some Array (_, 0, _) ->
+    Stack.push stack e
+  | Some Array (left_to_read, consume, inner_stack) ->
+    let _ = Stack.pop stack in
+    one_record_read inner_stack e;
+    let appended = Array (Int.pred left_to_read, consume, inner_stack) in
+    Stack.push stack appended
+
+let finished_array_read stack =
+  match Stack.top stack with
+  | Some Array (0, _, _) -> true
+  | _ -> false
+
+let rec unwind_stack stack =
+  stack
+  |> Stack.to_list
+  |> List.fold ~init:(0, []) ~f:(fun (consumed, unwound) ->
+      function
+      | Element (consume, resp) -> (consume + consumed, resp :: unwound)
+      | Array (_, consume, stack) ->
+        let consumed', unwound' = unwind_stack stack in
+        (consume + consumed' + consumed, (Resp.Array unwound')::unwound))
+  |> Tuple2.map_snd ~f:List.rev
+
+let rec handle_chunk stack iobuf =
   match record_length iobuf with
   | None -> return `Continue
   | Some len ->
@@ -61,7 +95,7 @@ let rec handle_chunk iobuf =
         let rec loop xs = function
           | 0 -> return @@ `Stop xs
           | remaining ->
-            match%bind handle_chunk iobuf with
+            match%bind handle_chunk stack iobuf with
             | `Stop parsed -> loop (parsed::xs) (Int.pred remaining)
             | `Continue -> return `Continue
         in
@@ -74,7 +108,8 @@ let rec handle_chunk iobuf =
       return @@ `Stop Resp.Null
 
 let read_resp reader =
-  let%bind res = Reader.read_one_iobuf_at_a_time reader ~handle_chunk in
+  let stack = Stack.create () in
+  let%bind res = Reader.read_one_iobuf_at_a_time reader ~handle_chunk:(handle_chunk stack) in
   match res with
   | `Eof -> return @@ Error `Eof
   | `Stopped v -> return @@ Ok v
