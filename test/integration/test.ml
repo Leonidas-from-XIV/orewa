@@ -53,8 +53,8 @@ let test_set_get () =
 let test_large_set_get () =
   Orewa.connect ~host @@ fun conn ->
     let key = random_key () in
-    let ten_mb = 1024 * 1024 * 10 in
-    let value = String.init ten_mb ~f:(fun _ -> 'a') in
+    let exceeding_read_buffer = 128 * 1024 in
+    let value = String.init exceeding_read_buffer ~f:(fun _ -> 'a') in
     let%bind res = Orewa.set conn ~key value in
     Alcotest.(check ue) "Large SET failed" (Ok ()) res;
     let%bind res = Orewa.get conn key in

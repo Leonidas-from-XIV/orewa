@@ -22,43 +22,43 @@ let consume_record ~len iobuf =
 let discard_prefix =
   String.subo ~pos:1
 
-type bulk_read = | Finished of string | Awaiting of int
-type nested_resp = | Atomic of Resp.t | Array of (int * nested_resp Stack.t) | String of bulk_read
-
-let show_bulk_read = function
-  | Finished s -> Printf.sprintf "Finished(\"%s\")" s
-  | Awaiting d -> Printf.sprintf "Awaiting(%d)" d
+type nested_resp = | Atomic of Resp.t | Array of (int * nested_resp Stack.t) | String of (int * string)
 
 let show_nested_resp = function
   | Atomic _ -> "Element(..)"
   | Array (to_read, _) -> Printf.sprintf "Array[%d](..)" to_read
-  | String bulk -> Printf.sprintf "String[%s](..)" (show_bulk_read bulk)
+  | String (left, _) -> Printf.sprintf "String[%d](..)" left
 
 let rec one_record_read stack e =
   match Stack.top stack with
   | None
   | Some Atomic _
-  | Some Array (0, _)
-  | Some String (Finished _) ->
+  | Some String _
+  | Some Array (0, _) ->
     Stack.push stack e
-  | Some String (Awaiting left_to_read) ->
-    let _ = Stack.pop stack in
-    (* TODO incorrect *)
-    let appended = String (Awaiting left_to_read) in
-    Stack.push stack appended
   | Some Array (left_to_read, inner_stack) ->
     let _ = Stack.pop stack in
     one_record_read inner_stack e;
-    let appended = Array (Int.pred left_to_read, inner_stack) in
-    Stack.push stack appended
+    let updated = Array (Int.pred left_to_read, inner_stack) in
+    Stack.push stack updated
+
+let update_latest_record_read stack s =
+  match Stack.top stack with
+  | Some String (0, _) ->
+    ()
+  | Some String (left_to_read, rope) ->
+    let _ = Stack.pop stack in
+    let updated = String (left_to_read - (String.length s), rope ^ s) in
+    Stack.push stack updated
+  | _ -> ()
 
 let rec unwind_stack stack =
   stack
   |> Stack.to_list
   |> List.map ~f:(function
     | Atomic resp -> resp
-    (* TODO incorrect *)
-    | String _ -> Resp.String ""
+    | String (_, s) ->
+      Resp.Bulk (String.subo ~len:((String.length s) - 2) s)
     | Array (_, stack) ->
       Resp.Array (List.rev (unwind_stack stack)))
 
@@ -67,12 +67,39 @@ let unfinished_array stack =
   | Some Array (n, _) when n > 0 -> true
   | _ -> false
 
+let unfinished_bulk stack =
+  match Stack.top stack with
+  | Some String (n, _) when n > 0 -> true
+  | _ -> false
+
+let bulk_left_to_read stack =
+  match Stack.top stack with
+  | Some String (0, _) -> None
+  | Some String (bytes, _) -> Some bytes
+  | _ -> None
+
 let rec handle_chunk stack iobuf =
   let read_on stack =
     match unfinished_array stack with
     | true -> handle_chunk stack iobuf
     | false -> return @@ `Stop ()
   in
+  Log.Global.error "Reading bulk string: %b" (unfinished_bulk stack);
+  match bulk_left_to_read stack with
+  | Some left_to_read ->
+    Log.Global.error "Stack: %s" (stack |> Stack.to_list |> List.map ~f:show_nested_resp |> String.concat ~sep:"; ");
+    let retrieved = Iobuf.length iobuf in
+    Log.Global.error "Bulk left to read: %d bytes, retrieved %d bytes" left_to_read retrieved;
+    (match left_to_read <= retrieved with
+    | true ->
+        let content = Iobuf.Consume.stringo ~len:left_to_read iobuf in
+        update_latest_record_read stack content;
+        read_on stack
+    | false ->
+        let content = Iobuf.Consume.stringo ~len:retrieved iobuf in
+        update_latest_record_read stack content;
+        return `Continue)
+  | None -> 
   match record_length iobuf with
   | None -> return `Continue
   | Some len ->
@@ -96,14 +123,21 @@ let rec handle_chunk stack iobuf =
     | '$' ->
       (* Bulk string *)
       let bulk_len = consume_record ~len iobuf |> discard_prefix |> int_of_string in
-      Log.Global.error "LEN %d" bulk_len;
-      (* read including the trailing \r\n and discard those *)
-      (* TODO this might actually fail, since there might be not enough bytes in the buffer to consumed *)
-      let content = consume_record ~len:(bulk_len + 2) iobuf in
-      Log.Global.error "CONTENT: '%s'" (String.escaped content);
-      let resp = Resp.Bulk content in
-      one_record_read stack (Atomic resp);
-      read_on stack
+      Log.Global.error "Bulk LEN %d" bulk_len;
+      let retrieved = Iobuf.length iobuf in
+      (match bulk_len <= retrieved with
+      | true ->
+        (* read including the trailing \r\n and discard those *)
+        let content = consume_record ~len:(bulk_len + 2) iobuf in
+        Log.Global.error "CONTENT: '%s'" (String.escaped content);
+        let resp = Resp.Bulk content in
+        one_record_read stack (Atomic resp);
+        read_on stack
+      | false ->
+        let content = Iobuf.Consume.stringo ~len:retrieved iobuf in
+        let left_to_read = bulk_len - retrieved + 2 in
+        one_record_read stack (String (left_to_read, content));
+        return @@ `Continue)
     | ':' ->
       (* Integer *)
       let value = consume_record ~len iobuf |> discard_prefix |> int_of_string in
