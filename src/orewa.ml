@@ -22,18 +22,30 @@ let consume_record ~len iobuf =
 let discard_prefix =
   String.subo ~pos:1
 
-type nested_resp = | Element of Resp.t | Array of (int * nested_resp Stack.t)
+type bulk_read = | Finished of string | Awaiting of int
+type nested_resp = | Atomic of Resp.t | Array of (int * nested_resp Stack.t) | String of bulk_read
+
+let show_bulk_read = function
+  | Finished s -> Printf.sprintf "Finished(\"%s\")" s
+  | Awaiting d -> Printf.sprintf "Awaiting(%d)" d
 
 let show_nested_resp = function
-  | Element _ -> "Element(..)"
+  | Atomic _ -> "Element(..)"
   | Array (to_read, _) -> Printf.sprintf "Array[%d](..)" to_read
+  | String bulk -> Printf.sprintf "String[%s](..)" (show_bulk_read bulk)
 
 let rec one_record_read stack e =
   match Stack.top stack with
   | None
-  | Some Element _
-  | Some Array (0, _) ->
+  | Some Atomic _
+  | Some Array (0, _)
+  | Some String (Finished _) ->
     Stack.push stack e
+  | Some String (Awaiting left_to_read) ->
+    let _ = Stack.pop stack in
+    (* TODO incorrect *)
+    let appended = String (Awaiting left_to_read) in
+    Stack.push stack appended
   | Some Array (left_to_read, inner_stack) ->
     let _ = Stack.pop stack in
     one_record_read inner_stack e;
@@ -44,7 +56,9 @@ let rec unwind_stack stack =
   stack
   |> Stack.to_list
   |> List.map ~f:(function
-    | Element resp -> resp
+    | Atomic resp -> resp
+    (* TODO incorrect *)
+    | String _ -> Resp.String ""
     | Array (_, stack) ->
       Resp.Array (List.rev (unwind_stack stack)))
 
@@ -70,30 +84,31 @@ let rec handle_chunk stack iobuf =
       let content = consume_record ~len iobuf |> discard_prefix in
       Log.Global.error "READ: %s" (String.escaped content);
       let resp = Resp.String content in
-      one_record_read stack (Element resp);
+      one_record_read stack (Atomic resp);
       read_on stack
     | '-' ->
       (* Error, which is also a simple string *)
       let content = consume_record ~len iobuf |> discard_prefix in
       Log.Global.error "READ: %s" (String.escaped content);
       let resp = Resp.Error content in
-      one_record_read stack (Element resp);
+      one_record_read stack (Atomic resp);
       read_on stack
     | '$' ->
       (* Bulk string *)
       let bulk_len = consume_record ~len iobuf |> discard_prefix |> int_of_string in
       Log.Global.error "LEN %d" bulk_len;
       (* read including the trailing \r\n and discard those *)
+      (* TODO this might actually fail, since there might be not enough bytes in the buffer to consumed *)
       let content = consume_record ~len:(bulk_len + 2) iobuf in
       Log.Global.error "CONTENT: '%s'" (String.escaped content);
       let resp = Resp.Bulk content in
-      one_record_read stack (Element resp);
+      one_record_read stack (Atomic resp);
       read_on stack
     | ':' ->
       (* Integer *)
       let value = consume_record ~len iobuf |> discard_prefix |> int_of_string in
       let resp = Resp.Integer value in
-      one_record_read stack (Element resp);
+      one_record_read stack (Atomic resp);
       read_on stack
     | '*' ->
       (* Array *)

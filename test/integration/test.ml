@@ -50,6 +50,17 @@ let test_set_get () =
     Alcotest.(check re) "Correct response" (Ok (Orewa.Resp.Bulk value)) res;
     return ()
 
+let test_large_set_get () =
+  Orewa.connect ~host @@ fun conn ->
+    let key = random_key () in
+    let ten_mb = 1024 * 1024 * 10 in
+    let value = String.init ten_mb ~f:(fun _ -> 'a') in
+    let%bind res = Orewa.set conn ~key value in
+    Alcotest.(check ue) "Large SET failed" (Ok ()) res;
+    let%bind res = Orewa.get conn key in
+    Alcotest.(check re) "Large GET retrieves everything" (Ok (Orewa.Resp.Bulk value)) res;
+    return ()
+
 let test_lpush () =
   Orewa.connect ~host @@ fun conn ->
     let key = random_key () in
@@ -73,6 +84,7 @@ let test_set = [
   Alcotest_async.test_case "ECHO" `Slow test_echo;
   Alcotest_async.test_case "SET" `Slow test_set;
   Alcotest_async.test_case "GET" `Slow test_set_get;
+  Alcotest_async.test_case "Large SET/GET" `Slow test_large_set_get;
   Alcotest_async.test_case "LPUSH" `Slow test_lpush;
   Alcotest_async.test_case "LRANGE" `Slow test_lpush_lrange;
 ]
