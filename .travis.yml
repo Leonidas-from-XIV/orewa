@@ -15,7 +15,7 @@ env:
   global:
     - PACKAGE=orewa
     - TESTS=true
-    - POST_INSTALL_HOOK="make integration"
+    - POST_INSTALL_HOOK="opam install orewa --with-test --deps-only && make integration"
   matrix:
     - OCAML_VERSION=4.04 COVERAGE=YES
     - OCAML_VERSION=4.05
