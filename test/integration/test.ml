@@ -66,7 +66,7 @@ let test_set_expiry () =
     Alcotest.(check ue) "Correctly SET expiry" (Ok ()) res;
     let%bind res = Orewa.get conn key in
     Alcotest.(check soe) "Key still exists" (Ok (Some value)) res;
-    let%bind () = after expire in
+    let%bind () = after Time.Span.(expire / 0.75) in
     let%bind res = Orewa.get conn key in
     Alcotest.(check soe) "Key has expired" (Ok None) res;
     return ()
