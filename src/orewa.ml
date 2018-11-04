@@ -1,8 +1,6 @@
 open Core
 open Async
 
-module Resp = Resp
-
 type t = {
   reader : Reader.t;
   writer : Writer.t;
@@ -23,7 +21,10 @@ let request { reader; writer } req =
   Parser.read_resp reader
 
 let echo t message =
-  request t ["ECHO"; message]
+  let open Deferred.Result.Let_syntax in
+  match%bind request t ["ECHO"; message] with
+  | Resp.Bulk v -> return v
+  | _ -> Deferred.return @@ Error `Unexpected
 
 let set t ~key value =
   let open Deferred.Result.Let_syntax in
@@ -32,7 +33,10 @@ let set t ~key value =
   | _ -> Deferred.return @@ Error `Unexpected
 
 let get t key =
-  request t ["GET"; key]
+  let open Deferred.Result.Let_syntax in
+  match%bind request t ["GET"; key] with
+  | Resp.Bulk v -> return v
+  | _ -> Deferred.return @@ Error `Unexpected
 
 let lpush t ~key value =
   let open Deferred.Result.Let_syntax in

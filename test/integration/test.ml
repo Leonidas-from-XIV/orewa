@@ -11,11 +11,10 @@ module Orewa_error = struct
 end
 
 let err = Alcotest.testable Orewa_error.pp Orewa_error.equal
-let resp = Alcotest.testable Orewa.Resp.pp Orewa.Resp.equal
 
-let re = Alcotest.(result resp err)
 let ue = Alcotest.(result unit err)
 let ie = Alcotest.(result int err)
+let se = Alcotest.(result string err)
 
 let truncated_string_pp formatter str =
   let str = Printf.sprintf "%s(...)" (String.prefix str 10) in
@@ -38,7 +37,7 @@ let test_echo () =
   Orewa.connect ~host @@ fun conn ->
     let message = "Hello" in
     let%bind response = Orewa.echo conn message in
-    Alcotest.(check re) "ECHO faulty" (Ok (Orewa.Resp.Bulk message)) response;
+    Alcotest.(check se) "ECHO faulty" (Ok message) response;
     return ()
 
 let test_set () =
@@ -54,7 +53,7 @@ let test_set_get () =
     let value = random_key () in
     let%bind _ = Orewa.set conn ~key value in
     let%bind res = Orewa.get conn key in
-    Alcotest.(check re) "Correct response" (Ok (Orewa.Resp.Bulk value)) res;
+    Alcotest.(check se) "Correct response" (Ok value) res;
     return ()
 
 let test_large_set_get () =
@@ -64,7 +63,7 @@ let test_large_set_get () =
     let%bind res = Orewa.set conn ~key value in
     Alcotest.(check ue) "Large SET failed" (Ok ()) res;
     let%bind res = Orewa.get conn key in
-    Alcotest.(check re) "Large GET retrieves everything" (Ok (Orewa.Resp.Bulk value)) res;
+    Alcotest.(check se) "Large GET retrieves everything" (Ok value) res;
     return ()
 
 let test_lpush () =
