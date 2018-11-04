@@ -3,6 +3,7 @@ sudo: required
 services:
   - redis-server
 install:
+  - redis-cli -p 6379 --raw ECHO works
   - wget https://raw.githubusercontent.com/ocaml/ocaml-ci-scripts/master/.travis-opam.sh
   - if [ -n "$COVERAGE" ]; then wget https://raw.githubusercontent.com/simonjbeaumont/ocaml-travis-coveralls/master/travis-coveralls.sh; fi
 script: bash -ex .travis-opam.sh
