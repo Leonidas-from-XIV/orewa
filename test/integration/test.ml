@@ -4,6 +4,7 @@ open Async
 (* This integration test will leak Redis keys left and right *)
 
 let host = "localhost"
+let exceeding_read_buffer = 128 * 1024
 
 module Orewa_error = struct
   type t = [ `Connection_closed | `Eof | `Unexpected] [@@deriving show, eq]
@@ -15,6 +16,12 @@ let resp = Alcotest.testable Orewa.Resp.pp Orewa.Resp.equal
 let re = Alcotest.(result resp err)
 let ue = Alcotest.(result unit err)
 let ie = Alcotest.(result int err)
+
+let truncated_string_pp formatter str =
+  let str = Printf.sprintf "%s(...)" (String.prefix str 10) in
+  Format.pp_print_text formatter str
+
+let truncated_string = Alcotest.testable truncated_string_pp String.equal
 
 let random_state = Random.State.make_self_init ()
 let random_key () =
@@ -53,7 +60,6 @@ let test_set_get () =
 let test_large_set_get () =
   Orewa.connect ~host @@ fun conn ->
     let key = random_key () in
-    let exceeding_read_buffer = 128 * 1024 in
     let value = String.init exceeding_read_buffer ~f:(fun _ -> 'a') in
     let%bind res = Orewa.set conn ~key value in
     Alcotest.(check ue) "Large SET failed" (Ok ()) res;
@@ -77,7 +83,20 @@ let test_lpush_lrange () =
     let%bind _ = Orewa.lpush conn ~key value in
     let%bind _ = Orewa.lpush conn ~key value' in
     let%bind res = Orewa.lrange conn ~key ~start:0 ~stop:(-1) in
-    Alcotest.(check (result (list string) err)) "LRANGE failed" (Ok [value'; value]) res;
+    Alcotest.(check (result (list truncated_string) err)) "LRANGE failed" (Ok [value'; value]) res;
+    return ()
+
+let test_large_lrange () =
+  Orewa.connect ~host @@ fun conn ->
+    let key = random_key () in
+    let value = String.init exceeding_read_buffer ~f:(fun _ -> 'a') in
+    let values = 5 in
+    let%bind () = Deferred.for_ 0 ~to_:values ~do_:(fun _ ->
+      Orewa.lpush conn ~key value |> Deferred.ignore_m)
+    in
+    let expected = Ok (List.init values ~f:(fun _ -> value)) in
+    let%bind res = Orewa.lrange conn ~key ~start:0 ~stop:(-1) in
+    Alcotest.(check (result (list truncated_string) err)) "LRANGE failed" expected res;
     return ()
 
 let test_set = [
@@ -87,6 +106,7 @@ let test_set = [
   Alcotest_async.test_case "Large SET/GET" `Slow test_large_set_get;
   Alcotest_async.test_case "LPUSH" `Slow test_lpush;
   Alcotest_async.test_case "LRANGE" `Slow test_lpush_lrange;
+  Alcotest_async.test_case "Large LRANGE" `Slow test_large_lrange;
 ]
 
 let () =

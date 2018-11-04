@@ -48,14 +48,14 @@ let rec one_record_read stack e =
     let updated = Array (Int.pred left_to_read, inner_stack) in
     Stack.push stack updated
 
-let update_latest_record_read stack s =
+let update_latest_bulk_read stack retrieved s =
   let stack = topmost stack in
   match Stack.top stack with
   | Some String (0, _) ->
     ()
   | Some String (left_to_read, rope) ->
     let _ = Stack.pop stack in
-    let updated = String (left_to_read - (String.length s), Rope.(rope ^ (of_string s))) in
+    let updated = String (left_to_read - retrieved, Rope.(rope ^ (of_string s))) in
     Stack.push stack updated
   | _ -> ()
 
@@ -75,17 +75,10 @@ let unfinished_array stack =
   | Some Array (n, _) when n > 0 -> true
   | _ -> false
 
-let unfinished_bulk stack =
-  let stack = topmost stack in
-  match Stack.top stack with
-  | Some String (n, _) when n > 0 -> true
-  | _ -> false
-
 let bulk_left_to_read stack =
   let stack = topmost stack in
   match Stack.top stack with
-  | Some String (0, _) -> None
-  | Some String (bytes, _) -> Some bytes
+  | Some String (bytes, _) when bytes > 0 -> Some bytes
   | _ -> None
 
 let rec handle_chunk stack iobuf =
@@ -94,7 +87,13 @@ let rec handle_chunk stack iobuf =
     | true -> handle_chunk stack iobuf
     | false -> return @@ `Stop ()
   in
-  Log.Global.error "Reading bulk string: %b" (unfinished_bulk stack);
+  let read_simple_string ~len constructor =
+    let content = consume_record ~len iobuf |> discard_prefix in
+    Log.Global.error "READ: %s" (String.escaped content);
+    one_record_read stack (Atomic (constructor content));
+    read_on stack
+  in
+
   match bulk_left_to_read stack with
   | Some left_to_read ->
     Log.Global.error "Stack: %s" (stack |> Stack.to_list |> List.map ~f:show_nested_resp |> String.concat ~sep:"; ");
@@ -103,67 +102,59 @@ let rec handle_chunk stack iobuf =
     (match left_to_read <= retrieved with
     | true ->
         let content = Iobuf.Consume.stringo ~len:left_to_read iobuf in
-        update_latest_record_read stack content;
+        update_latest_bulk_read stack retrieved content;
         read_on stack
     | false ->
         let content = Iobuf.Consume.stringo ~len:retrieved iobuf in
-        update_latest_record_read stack content;
+        update_latest_bulk_read stack retrieved content;
         return `Continue)
   | None -> 
-  match record_length iobuf with
-  | None -> return `Continue
-  | Some len ->
-    (* peek, because if `Continue is returned we need to preserve the prefix and
-     * don't consume it *)
-    match Iobuf.Peek.char ~pos:0 iobuf with
-    | '+' ->
-      (* Simple string *)
-      let content = consume_record ~len iobuf |> discard_prefix in
-      Log.Global.error "READ: %s" (String.escaped content);
-      let resp = Resp.String content in
-      one_record_read stack (Atomic resp);
-      read_on stack
-    | '-' ->
-      (* Error, which is also a simple string *)
-      let content = consume_record ~len iobuf |> discard_prefix in
-      Log.Global.error "READ: %s" (String.escaped content);
-      let resp = Resp.Error content in
-      one_record_read stack (Atomic resp);
-      read_on stack
-    | '$' ->
-      (* Bulk string *)
-      let bulk_len = consume_record ~len iobuf |> discard_prefix |> int_of_string in
-      Log.Global.error "Bulk LEN %d" bulk_len;
-      let retrieved = Iobuf.length iobuf in
-      (match bulk_len <= retrieved with
-      | true ->
-        (* read including the trailing \r\n and discard those *)
-        let content = consume_record ~len:(bulk_len + 2) iobuf in
-        Log.Global.error "CONTENT: '%s'" (String.escaped content);
-        let resp = Resp.Bulk content in
+    match record_length iobuf with
+    | None -> return `Continue
+    | Some len ->
+      (* peek, because if `Continue is returned we need to preserve the prefix and
+       * don't consume it *)
+      match Iobuf.Peek.char ~pos:0 iobuf with
+      | '+' ->
+        (* Simple string *)
+        read_simple_string ~len (fun content -> Resp.String content)
+      | '-' ->
+        (* Error, which is also a simple string *)
+        read_simple_string ~len (fun content -> Resp.Error content)
+      | '$' ->
+        (* Bulk string *)
+        let bulk_len = consume_record ~len iobuf |> discard_prefix |> int_of_string in
+        Log.Global.error "Bulk LEN %d" bulk_len;
+        let retrieved = Iobuf.length iobuf in
+        (match bulk_len <= retrieved with
+        | true ->
+          (* read including the trailing \r\n and discard those *)
+          let content = consume_record ~len:(bulk_len + 2) iobuf in
+          Log.Global.error "CONTENT: '%s'" (String.escaped content);
+          let resp = Resp.Bulk content in
+          one_record_read stack (Atomic resp);
+          read_on stack
+        | false ->
+          let content = Iobuf.Consume.stringo ~len:retrieved iobuf in
+          let left_to_read = bulk_len - retrieved + 2 in
+          one_record_read stack (String (left_to_read, Rope.of_string content));
+          return @@ `Continue)
+      | ':' ->
+        (* Integer *)
+        let value = consume_record ~len iobuf |> discard_prefix |> int_of_string in
+        let resp = Resp.Integer value in
         one_record_read stack (Atomic resp);
         read_on stack
-      | false ->
-        let content = Iobuf.Consume.stringo ~len:retrieved iobuf in
-        let left_to_read = bulk_len - retrieved + 2 in
-        one_record_read stack (String (left_to_read, Rope.of_string content));
-        return @@ `Continue)
-    | ':' ->
-      (* Integer *)
-      let value = consume_record ~len iobuf |> discard_prefix |> int_of_string in
-      let resp = Resp.Integer value in
-      one_record_read stack (Atomic resp);
-      read_on stack
-    | '*' ->
-      (* Array *)
-      let elements = consume_record ~len iobuf |> discard_prefix |> int_of_string in
-      Log.Global.error "ELEMENTS TO READ: %d" elements;
-      one_record_read stack (Array (elements, Stack.create ()));
-      handle_chunk stack iobuf
-    | unknown ->
-      (* Unknown match *)
-      Log.Global.error "Unparseable type tag %C" unknown;
-      return @@ `Stop ()
+      | '*' ->
+        (* Array *)
+        let elements = consume_record ~len iobuf |> discard_prefix |> int_of_string in
+        Log.Global.error "ELEMENTS TO READ: %d" elements;
+        one_record_read stack (Array (elements, Stack.create ()));
+        handle_chunk stack iobuf
+      | unknown ->
+        (* Unknown match *)
+        Log.Global.error "Unparseable type tag %C" unknown;
+        return @@ `Stop ()
 
 type resp_list = Resp.t list [@@deriving show]
 
