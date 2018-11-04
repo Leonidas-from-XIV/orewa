@@ -22,12 +22,18 @@ let consume_record ~len iobuf =
 let discard_prefix =
   String.subo ~pos:1
 
-type nested_resp = | Atomic of Resp.t | Array of (int * nested_resp Stack.t) | String of (int * string)
+type nested_resp = | Atomic of Resp.t | Array of (int * nested_resp Stack.t) | String of (int * Rope.t)
 
 let show_nested_resp = function
   | Atomic _ -> "Element(..)"
   | Array (to_read, _) -> Printf.sprintf "Array[%d](..)" to_read
   | String (left, _) -> Printf.sprintf "String[%d](..)" left
+
+let rec topmost stack =
+  match Stack.top stack with
+  | Some Array (left_to_read, inner_stack) when left_to_read > 0 ->
+    topmost inner_stack
+  | _ -> stack
 
 let rec one_record_read stack e =
   match Stack.top stack with
@@ -43,12 +49,13 @@ let rec one_record_read stack e =
     Stack.push stack updated
 
 let update_latest_record_read stack s =
+  let stack = topmost stack in
   match Stack.top stack with
   | Some String (0, _) ->
     ()
   | Some String (left_to_read, rope) ->
     let _ = Stack.pop stack in
-    let updated = String (left_to_read - (String.length s), rope ^ s) in
+    let updated = String (left_to_read - (String.length s), Rope.(rope ^ (of_string s))) in
     Stack.push stack updated
   | _ -> ()
 
@@ -57,7 +64,8 @@ let rec unwind_stack stack =
   |> Stack.to_list
   |> List.map ~f:(function
     | Atomic resp -> resp
-    | String (_, s) ->
+    | String (_, rope) ->
+      let s = Rope.to_string rope in
       Resp.Bulk (String.subo ~len:((String.length s) - 2) s)
     | Array (_, stack) ->
       Resp.Array (List.rev (unwind_stack stack)))
@@ -68,11 +76,13 @@ let unfinished_array stack =
   | _ -> false
 
 let unfinished_bulk stack =
+  let stack = topmost stack in
   match Stack.top stack with
   | Some String (n, _) when n > 0 -> true
   | _ -> false
 
 let bulk_left_to_read stack =
+  let stack = topmost stack in
   match Stack.top stack with
   | Some String (0, _) -> None
   | Some String (bytes, _) -> Some bytes
@@ -136,7 +146,7 @@ let rec handle_chunk stack iobuf =
       | false ->
         let content = Iobuf.Consume.stringo ~len:retrieved iobuf in
         let left_to_read = bulk_len - retrieved + 2 in
-        one_record_read stack (String (left_to_read, content));
+        one_record_read stack (String (left_to_read, Rope.of_string content));
         return @@ `Continue)
     | ':' ->
       (* Integer *)
@@ -160,6 +170,7 @@ type resp_list = Resp.t list [@@deriving show]
 let read_resp reader =
   let stack = Stack.create () in
   let%bind res = Reader.read_one_iobuf_at_a_time reader ~handle_chunk:(handle_chunk stack) in
+  Log.Global.error "Stack is %s " (stack |> Stack.to_list |> List.map ~f:show_nested_resp |> String.concat ~sep:" ");
   let resps = unwind_stack stack in
   Log.Global.error "Stack unwound to: %s" (show_resp_list resps);
   match List.hd resps with
