@@ -28,9 +28,9 @@ let echo t message =
 
 type exist = Not_if_exists | Only_if_exists
 
-let set t ~key ?expiration ?exist value =
+let set t ~key ?expire ?exist value =
   let open Deferred.Result.Let_syntax in
-  let expiry = match expiration with
+  let expiry = match expire with
     | None -> []
     | Some span -> ["PX"; span |> Time.Span.to_ms |> int_of_float |> string_of_int]
   in
@@ -47,7 +47,8 @@ let set t ~key ?expiration ?exist value =
 let get t key =
   let open Deferred.Result.Let_syntax in
   match%bind request t ["GET"; key] with
-  | Resp.Bulk v -> return v
+  | Resp.Bulk v -> return @@ Some v
+  | Resp.Null -> return @@ None
   | _ -> Deferred.return @@ Error `Unexpected
 
 let lpush t ~key value =

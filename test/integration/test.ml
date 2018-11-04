@@ -15,6 +15,7 @@ let err = Alcotest.testable Orewa_error.pp Orewa_error.equal
 let ue = Alcotest.(result unit err)
 let ie = Alcotest.(result int err)
 let se = Alcotest.(result string err)
+let soe = Alcotest.(result (option string) err)
 
 let truncated_string_pp formatter str =
   let str = Printf.sprintf "%s(...)" (String.prefix str 10) in
@@ -53,8 +54,23 @@ let test_set_get () =
     let value = random_key () in
     let%bind _ = Orewa.set conn ~key value in
     let%bind res = Orewa.get conn key in
-    Alcotest.(check se) "Correct response" (Ok value) res;
+    Alcotest.(check soe) "Correct response" (Ok (Some value)) res;
     return ()
+
+let test_set_expiry () =
+  Orewa.connect ~host @@ fun conn ->
+    let key = random_key () in
+    let value = random_key () in
+    let expire = Time.Span.of_ms 200. in
+    let%bind res = Orewa.set conn ~key ~expire value in
+    Alcotest.(check ue) "Correctly SET expiry" (Ok ()) res;
+    let%bind res = Orewa.get conn key in
+    Alcotest.(check soe) "Key still exists" (Ok (Some value)) res;
+    let%bind () = after expire in
+    let%bind res = Orewa.get conn key in
+    Alcotest.(check soe) "Key has expired" (Ok None) res;
+    return ()
+
 
 let test_large_set_get () =
   Orewa.connect ~host @@ fun conn ->
@@ -63,7 +79,7 @@ let test_large_set_get () =
     let%bind res = Orewa.set conn ~key value in
     Alcotest.(check ue) "Large SET failed" (Ok ()) res;
     let%bind res = Orewa.get conn key in
-    Alcotest.(check se) "Large GET retrieves everything" (Ok value) res;
+    Alcotest.(check soe) "Large GET retrieves everything" (Ok (Some value)) res;
     return ()
 
 let test_lpush () =
@@ -103,6 +119,7 @@ let tests = [
   Alcotest_async.test_case "SET" `Slow test_set;
   Alcotest_async.test_case "GET" `Slow test_set_get;
   Alcotest_async.test_case "Large SET/GET" `Slow test_large_set_get;
+  Alcotest_async.test_case "SET with expiry" `Slow test_set_expiry;
   Alcotest_async.test_case "LPUSH" `Slow test_lpush;
   Alcotest_async.test_case "LRANGE" `Slow test_lpush_lrange;
   Alcotest_async.test_case "Large LRANGE" `Slow test_large_lrange;

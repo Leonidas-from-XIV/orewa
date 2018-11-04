@@ -121,21 +121,28 @@ let rec handle_chunk stack iobuf =
       | '$' ->
         (* Bulk string *)
         let bulk_len = consume_record ~len iobuf |> discard_prefix |> int_of_string in
-        Log.Global.error "Bulk LEN %d" bulk_len;
-        let retrieved = Iobuf.length iobuf in
-        (match bulk_len <= retrieved with
+        (match bulk_len = (-1) with
         | true ->
-          (* read including the trailing \r\n and discard those *)
-          let content = consume_record ~len:(bulk_len + 2) iobuf in
-          Log.Global.error "CONTENT: '%s'" (String.escaped content);
-          let resp = Resp.Bulk content in
+          (* bulk length -1 means it is nil *)
+          let resp = Resp.Null in
           one_record_read stack (Atomic resp);
           read_on stack
         | false ->
-          let content = Iobuf.Consume.stringo ~len:retrieved iobuf in
-          let left_to_read = bulk_len - retrieved + 2 in
-          one_record_read stack (String (left_to_read, Rope.of_string content));
-          return @@ `Continue)
+          Log.Global.error "Bulk LEN %d" bulk_len;
+          let retrieved = Iobuf.length iobuf in
+          (match bulk_len <= retrieved with
+          | true ->
+            (* read including the trailing \r\n and discard those *)
+            let content = consume_record ~len:(bulk_len + 2) iobuf in
+            Log.Global.error "CONTENT: '%s'" (String.escaped content);
+            let resp = Resp.Bulk content in
+            one_record_read stack (Atomic resp);
+            read_on stack
+          | false ->
+            let content = Iobuf.Consume.stringo ~len:retrieved iobuf in
+            let left_to_read = bulk_len - retrieved + 2 in
+            one_record_read stack (String (left_to_read, Rope.of_string content));
+            return @@ `Continue))
       | ':' ->
         (* Integer *)
         let value = consume_record ~len iobuf |> discard_prefix |> int_of_string in
