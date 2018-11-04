@@ -26,9 +26,21 @@ let echo t message =
   | Resp.Bulk v -> return v
   | _ -> Deferred.return @@ Error `Unexpected
 
-let set t ~key value =
+type exist = Not_if_exists | Only_if_exists
+
+let set t ~key ?expiration ?exist value =
   let open Deferred.Result.Let_syntax in
-  match%bind request t ["SET"; key; value] with
+  let expiry = match expiration with
+    | None -> []
+    | Some span -> ["PX"; span |> Time.Span.to_ms |> int_of_float |> string_of_int]
+  in
+  let existence = match exist with
+    | None -> []
+    | Some Not_if_exists -> ["NX"]
+    | Some Only_if_exists -> ["PX"]
+  in
+  let command = ["SET"; key; value;] @ expiry @ existence in
+  match%bind request t command with
   | Resp.String "OK" -> return ()
   | _ -> Deferred.return @@ Error `Unexpected
 
