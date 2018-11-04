@@ -91,15 +91,15 @@ let test_large_lrange () =
     let key = random_key () in
     let value = String.init exceeding_read_buffer ~f:(fun _ -> 'a') in
     let values = 5 in
-    let%bind () = Deferred.for_ 0 ~to_:values ~do_:(fun _ ->
-      Orewa.lpush conn ~key value |> Deferred.ignore_m)
+    let%bind expected = Deferred.List.init values ~f:(fun _ ->
+      let%bind _ = Orewa.lpush conn ~key value in
+      return value)
     in
-    let expected = Ok (List.init values ~f:(fun _ -> value)) in
     let%bind res = Orewa.lrange conn ~key ~start:0 ~stop:(-1) in
-    Alcotest.(check (result (list truncated_string) err)) "LRANGE failed" expected res;
+    Alcotest.(check (result (list truncated_string) err)) "LRANGE failed" (Ok expected) res;
     return ()
 
-let test_set = [
+let tests = [
   Alcotest_async.test_case "ECHO" `Slow test_echo;
   Alcotest_async.test_case "SET" `Slow test_set;
   Alcotest_async.test_case "GET" `Slow test_set_get;
@@ -111,5 +111,5 @@ let test_set = [
 
 let () =
   Alcotest.run Caml.__MODULE__ [
-    ("test_set", test_set);
+    ("integration", tests);
   ]

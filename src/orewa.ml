@@ -24,16 +24,12 @@ let discard_prefix =
 
 type nested_resp = | Atomic of Resp.t | Array of (int * nested_resp Stack.t) | String of (int * Rope.t)
 
-let show_nested_resp = function
+let rec show_nested_resp = function
   | Atomic _ -> "Element(..)"
-  | Array (to_read, _) -> Printf.sprintf "Array[%d](..)" to_read
+  | Array (to_read, stack) ->
+    let v = stack |> Stack.to_list |> List.map ~f:show_nested_resp |> String.concat ~sep:"; " in
+    Printf.sprintf "Array[%d](%s)" to_read v
   | String (left, _) -> Printf.sprintf "String[%d](..)" left
-
-let rec topmost stack =
-  match Stack.top stack with
-  | Some Array (left_to_read, inner_stack) when left_to_read > 0 ->
-    topmost inner_stack
-  | _ -> stack
 
 let rec one_record_read stack e =
   match Stack.top stack with
@@ -48,14 +44,19 @@ let rec one_record_read stack e =
     let updated = Array (Int.pred left_to_read, inner_stack) in
     Stack.push stack updated
 
-let update_latest_bulk_read stack retrieved s =
-  let stack = topmost stack in
+let rec update_latest_bulk_read stack retrieved s =
   match Stack.top stack with
   | Some String (0, _) ->
     ()
+  | Some Array (_, stack) ->
+    update_latest_bulk_read stack retrieved s
   | Some String (left_to_read, rope) ->
     let _ = Stack.pop stack in
-    let updated = String (left_to_read - retrieved, Rope.(rope ^ (of_string s))) in
+    let left_to_read = left_to_read - retrieved in
+    (match left_to_read with
+    | 0 -> Log.Global.error "Bulk read finished"
+    | _ -> ());
+    let updated = String (left_to_read, Rope.(rope ^ (of_string s))) in
     Stack.push stack updated
   | _ -> ()
 
@@ -75,9 +76,9 @@ let unfinished_array stack =
   | Some Array (n, _) when n > 0 -> true
   | _ -> false
 
-let bulk_left_to_read stack =
-  let stack = topmost stack in
+let rec bulk_left_to_read stack =
   match Stack.top stack with
+  | Some Array (_, inner_stack) -> bulk_left_to_read inner_stack
   | Some String (bytes, _) when bytes > 0 -> Some bytes
   | _ -> None
 
@@ -96,13 +97,13 @@ let rec handle_chunk stack iobuf =
 
   match bulk_left_to_read stack with
   | Some left_to_read ->
-    Log.Global.error "Stack: %s" (stack |> Stack.to_list |> List.map ~f:show_nested_resp |> String.concat ~sep:"; ");
+    Log.Global.error "There is some bulk to read, current stack: %s" (stack |> Stack.to_list |> List.map ~f:show_nested_resp |> String.concat ~sep:"; ");
     let retrieved = Iobuf.length iobuf in
     Log.Global.error "Bulk left to read: %d bytes, retrieved %d bytes" left_to_read retrieved;
     (match left_to_read <= retrieved with
     | true ->
         let content = Iobuf.Consume.stringo ~len:left_to_read iobuf in
-        update_latest_bulk_read stack retrieved content;
+        update_latest_bulk_read stack left_to_read content;
         read_on stack
     | false ->
         let content = Iobuf.Consume.stringo ~len:retrieved iobuf in
@@ -148,12 +149,13 @@ let rec handle_chunk stack iobuf =
       | '*' ->
         (* Array *)
         let elements = consume_record ~len iobuf |> discard_prefix |> int_of_string in
-        Log.Global.error "ELEMENTS TO READ: %d" elements;
+        Log.Global.error "Array of %d to be read" elements;
         one_record_read stack (Array (elements, Stack.create ()));
         handle_chunk stack iobuf
       | unknown ->
         (* Unknown match *)
         Log.Global.error "Unparseable type tag %C" unknown;
+        Log.Global.error "Failing stack: %s" (stack |> Stack.to_list |> List.map ~f:show_nested_resp |> String.concat ~sep:"; ");
         return @@ `Stop ()
 
 type resp_list = Resp.t list [@@deriving show]
