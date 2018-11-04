@@ -6,9 +6,12 @@ all: ## Build the code
 clean: ## Clean source tree
 	dune clean
 
+.PHONY: integration
+integration: ## Run integration tests, requires Redis
+	dune build @integration --force
+
 .PHONY: test
-test: ## Run the tests
-	dune runtest --force
+test: integration ## Run the tests
 
 .PHONY: distrib
 distrib: ## Create a distribution tarball

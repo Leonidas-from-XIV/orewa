@@ -3,7 +3,6 @@ sudo: required
 services:
   - redis-server
 install:
-  - redis-cli -p 6379 --raw ECHO works
   - wget https://raw.githubusercontent.com/ocaml/ocaml-ci-scripts/master/.travis-opam.sh
   - if [ -n "$COVERAGE" ]; then wget https://raw.githubusercontent.com/simonjbeaumont/ocaml-travis-coveralls/master/travis-coveralls.sh; fi
 script: bash -ex .travis-opam.sh
@@ -16,6 +15,7 @@ env:
   global:
     - PACKAGE=orewa
     - TESTS=true
+    - POST_INSTALL_HOOK="make integration"
   matrix:
     - OCAML_VERSION=4.04 COVERAGE=YES
     - OCAML_VERSION=4.05
