@@ -9,7 +9,7 @@ env:
   global:
     - PACKAGE=orewa
     - TESTS=true
-    - POST_INSTALL_HOOK="opam install orewa --with-test --deps-only && opam list && ocamlfind list && make integration"
+    - POST_INSTALL_HOOK="opam install alcotest alcotest-async && make integration"
   matrix:
     - OCAML_VERSION=4.04
     - OCAML_VERSION=4.05
