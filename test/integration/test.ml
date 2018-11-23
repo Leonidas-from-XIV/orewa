@@ -155,6 +155,57 @@ let test_bitcount () =
     Alcotest.(check (result int err)) "BITCOUNT failed" (Ok 6) res;
     return ()
 
+let test_bitop () =
+  Orewa.connect ~host @@ fun conn ->
+    let key = random_key () in
+    let destkey = random_key () in
+    let value = "aaaa" in
+    let expected = Ok (String.length value) in
+    let%bind _ = Orewa.set conn ~key value in
+    let%bind res = Orewa.bitop conn ~destkey ~keys:[key] ~key Orewa.AND in
+    Alcotest.(check (result int err)) "BITOP failed" expected res;
+    let%bind res = Orewa.bitop conn ~destkey ~keys:[key] ~key Orewa.XOR in
+    Alcotest.(check (result int err)) "BITOP failed" expected res;
+    return ()
+
+let test_decr () =
+  Orewa.connect ~host @@ fun conn ->
+    let key = random_key () in
+    let value = 42 in
+    let%bind _ = Orewa.set conn ~key (string_of_int value) in
+    let%bind res = Orewa.decr conn key in
+    Alcotest.(check (result int err)) "DECR failed" (Ok (Int.pred value)) res;
+    return ()
+
+let test_decrby () =
+  Orewa.connect ~host @@ fun conn ->
+    let key = random_key () in
+    let value = 42 in
+    let decrement = 23 in
+    let%bind _ = Orewa.set conn ~key (string_of_int value) in
+    let%bind res = Orewa.decrby conn key decrement in
+    Alcotest.(check (result int err)) "DECRBY failed" (Ok (value - decrement)) res;
+    return ()
+
+let test_incr () =
+  Orewa.connect ~host @@ fun conn ->
+    let key = random_key () in
+    let value = 42 in
+    let%bind _ = Orewa.set conn ~key (string_of_int value) in
+    let%bind res = Orewa.incr conn key in
+    Alcotest.(check (result int err)) "INCR failed" (Ok (Int.succ value)) res;
+    return ()
+
+let test_incrby () =
+  Orewa.connect ~host @@ fun conn ->
+    let key = random_key () in
+    let value = 42 in
+    let increment = 23 in
+    let%bind _ = Orewa.set conn ~key (string_of_int value) in
+    let%bind res = Orewa.incrby conn key increment in
+    Alcotest.(check (result int err)) "INCRBY failed" (Ok (value + increment)) res;
+    return ()
+
 let tests = Alcotest_async.[
   test_case "ECHO" `Slow test_echo;
   test_case "SET" `Slow test_set;
@@ -169,6 +220,11 @@ let tests = Alcotest_async.[
   test_case "BGREWRITEAOF" `Slow test_bgrewriteaof;
   test_case "BGSAVE" `Slow test_bgsave;
   test_case "BITCOUNT" `Slow test_bitcount;
+  test_case "BITOP" `Slow test_bitop;
+  test_case "DECR" `Slow test_decr;
+  test_case "DECRBY" `Slow test_decrby;
+  test_case "INCR" `Slow test_incr;
+  test_case "INCRBY" `Slow test_incrby;
 ]
 
 let () =

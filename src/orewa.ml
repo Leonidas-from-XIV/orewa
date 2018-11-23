@@ -104,6 +104,48 @@ let bitcount t ?range key =
   | Resp.Integer n -> return n
   | _ -> Deferred.return @@ Error `Unexpected
 
+type bitop =
+  | AND
+  | OR
+  | XOR
+  | NOT
+
+let string_of_bitop = function
+  | AND -> "AND"
+  | OR -> "OR"
+  | XOR -> "XOR"
+  | NOT -> "NOT"
+
+let bitop t ~destkey ?(keys=[]) ~key op =
+  let open Deferred.Result.Let_syntax in
+  match%bind request t (["BITOP"; (string_of_bitop op); destkey; key] @ keys) with
+  | Resp.Integer n -> return n
+  | _ -> Deferred.return @@ Error `Unexpected
+
+let decr t key =
+  let open Deferred.Result.Let_syntax in
+  match%bind request t ["DECR"; key] with
+  | Resp.Integer n -> return n
+  | _ -> Deferred.return @@ Error `Unexpected
+
+let decrby t key decrement =
+  let open Deferred.Result.Let_syntax in
+  match%bind request t ["DECRBY"; key; (string_of_int decrement)] with
+  | Resp.Integer n -> return n
+  | _ -> Deferred.return @@ Error `Unexpected
+
+let incr t key =
+  let open Deferred.Result.Let_syntax in
+  match%bind request t ["INCR"; key] with
+  | Resp.Integer n -> return n
+  | _ -> Deferred.return @@ Error `Unexpected
+
+let incrby t key increment =
+  let open Deferred.Result.Let_syntax in
+  match%bind request t ["INCRBY"; key; (string_of_int increment)] with
+  | Resp.Integer n -> return n
+  | _ -> Deferred.return @@ Error `Unexpected
+
 let init reader writer =
   { reader; writer }
 
