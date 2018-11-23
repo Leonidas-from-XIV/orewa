@@ -146,6 +146,24 @@ let incrby t key increment =
   | Resp.Integer n -> return n
   | _ -> Deferred.return @@ Error `Unexpected
 
+let select t index =
+  let open Deferred.Result.Let_syntax in
+  match%bind request t ["SELECT"; (string_of_int index)] with
+  | Resp.String "OK" -> return ()
+  | _ -> Deferred.return @@ Error `Unexpected
+
+let del t ?(keys=[]) key =
+  let open Deferred.Result.Let_syntax in
+  match%bind request t (["DEL"; key] @ keys) with
+  | Resp.Integer n -> return n
+  | _ -> Deferred.return @@ Error `Unexpected
+
+let exists t ?(keys=[]) key =
+  let open Deferred.Result.Let_syntax in
+  match%bind request t (["EXISTS"; key] @ keys) with
+  | Resp.Integer n -> return n
+  | _ -> Deferred.return @@ Error `Unexpected
+
 let init reader writer =
   { reader; writer }
 

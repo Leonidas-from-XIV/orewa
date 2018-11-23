@@ -16,6 +16,7 @@ let ue = Alcotest.(result unit err)
 let ie = Alcotest.(result int err)
 let se = Alcotest.(result string err)
 let soe = Alcotest.(result (option string) err)
+let some_string = Alcotest.testable String.pp (const (const true))
 
 let truncated_string_pp formatter str =
   let str = Printf.sprintf "%s(...)" (String.prefix str 10) in
@@ -133,16 +134,16 @@ let test_auth () =
 let test_bgrewriteaof () =
   Orewa.connect ~host @@ fun conn ->
     let%bind res = Orewa.bgrewriteaof conn in
-    let expected = Ok "Background append only file rewriting started" in
-    Alcotest.(check (result string err)) "BGREWRITEAOF failed" expected res;
+    let expected = Ok "blurb" in
+    Alcotest.(check (result some_string err)) "BGREWRITEAOF failed" expected res;
     let%bind _ = Deferred.ok @@ after (Time.Span.of_sec 1.) in
     return ()
 
 let test_bgsave () =
   Orewa.connect ~host @@ fun conn ->
     let%bind res = Orewa.bgsave conn in
-    let expected = Ok "Background saving started" in
-    Alcotest.(check (result string err)) "BGSAVE failed" expected res;
+    let expected = Ok "blurb" in
+    Alcotest.(check (result some_string err)) "BGSAVE failed" expected res;
     return ()
 
 let test_bitcount () =
@@ -206,6 +207,34 @@ let test_incrby () =
     Alcotest.(check (result int err)) "INCRBY failed" (Ok (value + increment)) res;
     return ()
 
+let test_select () =
+  Orewa.connect ~host @@ fun conn ->
+    let index = 5 in
+    let%bind res = Orewa.select conn index in
+    Alcotest.(check (result unit err)) "SELECT failed" (Ok ()) res;
+    return ()
+
+let test_del () =
+  Orewa.connect ~host @@ fun conn ->
+    let key = random_key () in
+    let key' = random_key () in
+    let value = "aaaa" in
+    let%bind _ = Orewa.set conn ~key value in
+    let%bind _ = Orewa.set conn ~key:key' value in
+    let%bind res = Orewa.del conn ~keys:[key'] key in
+    Alcotest.(check (result int err)) "DEL failed" (Ok 2) res;
+    return ()
+
+let test_exists () =
+  Orewa.connect ~host @@ fun conn ->
+    let existing = random_key () in
+    let missing = random_key () in
+    let value = "aaaa" in
+    let%bind _ = Orewa.set conn ~key:existing value in
+    let%bind res = Orewa.exists conn ~keys:[existing] missing in
+    Alcotest.(check (result int err)) "EXISTS failed" (Ok 1) res;
+    return ()
+
 let tests = Alcotest_async.[
   test_case "ECHO" `Slow test_echo;
   test_case "SET" `Slow test_set;
@@ -225,6 +254,9 @@ let tests = Alcotest_async.[
   test_case "DECRBY" `Slow test_decrby;
   test_case "INCR" `Slow test_incr;
   test_case "INCRBY" `Slow test_incrby;
+  test_case "SELECT" `Slow test_select;
+  test_case "DEL" `Slow test_del;
+  test_case "EXISTS" `Slow test_exists;
 ]
 
 let () =
