@@ -3,3 +3,4 @@
 /*.install
 .merlin
 dump.rdb
+appendonly.aof
