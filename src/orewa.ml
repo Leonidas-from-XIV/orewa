@@ -68,6 +68,42 @@ let lrange t ~key ~start ~stop =
     |> Deferred.return
   | _ -> Deferred.return @@ Error `Unexpected
 
+let append t ~key value =
+  let open Deferred.Result.Let_syntax in
+  match%bind request t ["APPEND"; key; value] with
+  | Resp.Integer n -> return n
+  | _ -> Deferred.return @@ Error `Unexpected
+
+let auth t password =
+  let open Deferred.Result.Let_syntax in
+  match%bind request t ["AUTH"; password] with
+  | Resp.String "OK" -> return ()
+  | Resp.Error e -> Deferred.return @@ Error (`Redis_error e)
+  | _ -> Deferred.return @@ Error `Unexpected
+
+let bgrewriteaof t =
+  let open Deferred.Result.Let_syntax in
+  match%bind request t ["BGREWRITEAOF"] with
+  (* the documentation says it returns OK, but that's not true *)
+  | Resp.String v -> return v
+  | _ -> Deferred.return @@ Error `Unexpected
+
+let bgsave t =
+  let open Deferred.Result.Let_syntax in
+  match%bind request t ["BGSAVE"] with
+  | Resp.String v -> return v
+  | _ -> Deferred.return @@ Error `Unexpected
+
+let bitcount t ?range key =
+  let open Deferred.Result.Let_syntax in
+  let range = match range with
+    | None -> []
+    | Some (start, end_) -> [(string_of_int start); (string_of_int end_)]
+  in
+  match%bind request t (["BITCOUNT"; key] @ range) with
+  | Resp.Integer n -> return n
+  | _ -> Deferred.return @@ Error `Unexpected
+
 let init reader writer =
   { reader; writer }
 

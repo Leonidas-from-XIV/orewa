@@ -7,7 +7,7 @@ let host = "localhost"
 let exceeding_read_buffer = 128 * 1024
 
 module Orewa_error = struct
-  type t = [ `Connection_closed | `Eof | `Unexpected] [@@deriving show, eq]
+  type t = [ `Connection_closed | `Eof | `Unexpected | `Redis_error of string] [@@deriving show, eq]
 end
 
 let err = Alcotest.testable Orewa_error.pp Orewa_error.equal
@@ -114,15 +114,61 @@ let test_large_lrange () =
     Alcotest.(check (result (list truncated_string) err)) "LRANGE failed" (Ok expected) res;
     return ()
 
-let tests = [
-  Alcotest_async.test_case "ECHO" `Slow test_echo;
-  Alcotest_async.test_case "SET" `Slow test_set;
-  Alcotest_async.test_case "GET" `Slow test_set_get;
-  Alcotest_async.test_case "Large SET/GET" `Slow test_large_set_get;
-  Alcotest_async.test_case "SET with expiry" `Slow test_set_expiry;
-  Alcotest_async.test_case "LPUSH" `Slow test_lpush;
-  Alcotest_async.test_case "LRANGE" `Slow test_lpush_lrange;
-  Alcotest_async.test_case "Large LRANGE" `Slow test_large_lrange;
+let test_append () =
+  Orewa.connect ~host @@ fun conn ->
+    let key = random_key () in
+    let value = random_key () in
+    let%bind res = Orewa.append conn ~key value in
+    Alcotest.(check (result int err)) "APPEND unexpected" (Ok (String.length value)) res;
+    return ()
+
+let test_auth () =
+  Orewa.connect ~host @@ fun conn ->
+    let password = random_key () in
+    let%bind res = Orewa.auth conn password in
+    let expected = Error (`Redis_error "ERR Client sent AUTH, but no password is set") in
+    Alcotest.(check (result unit err)) "AUTH failed" expected res;
+    return ()
+
+let test_bgrewriteaof () =
+  Orewa.connect ~host @@ fun conn ->
+    let%bind res = Orewa.bgrewriteaof conn in
+    let expected = Ok "Background append only file rewriting started" in
+    Alcotest.(check (result string err)) "BGREWRITEAOF failed" expected res;
+    let%bind _ = Deferred.ok @@ after (Time.Span.of_sec 1.) in
+    return ()
+
+let test_bgsave () =
+  Orewa.connect ~host @@ fun conn ->
+    let%bind res = Orewa.bgsave conn in
+    let expected = Ok "Background saving started" in
+    Alcotest.(check (result string err)) "BGSAVE failed" expected res;
+    return ()
+
+let test_bitcount () =
+  Orewa.connect ~host @@ fun conn ->
+    let key = random_key () in
+    let%bind _ = Orewa.set conn ~key "aaaa" in
+    let%bind res = Orewa.bitcount conn key in
+    Alcotest.(check (result int err)) "BITCOUNT failed" (Ok 12) res;
+    let%bind res = Orewa.bitcount conn ~range:(1, 2) key in
+    Alcotest.(check (result int err)) "BITCOUNT failed" (Ok 6) res;
+    return ()
+
+let tests = Alcotest_async.[
+  test_case "ECHO" `Slow test_echo;
+  test_case "SET" `Slow test_set;
+  test_case "GET" `Slow test_set_get;
+  test_case "Large SET/GET" `Slow test_large_set_get;
+  test_case "SET with expiry" `Slow test_set_expiry;
+  test_case "LPUSH" `Slow test_lpush;
+  test_case "LRANGE" `Slow test_lpush_lrange;
+  test_case "Large LRANGE" `Slow test_large_lrange;
+  test_case "APPEND" `Slow test_append;
+  test_case "AUTH" `Slow test_auth;
+  test_case "BGREWRITEAOF" `Slow test_bgrewriteaof;
+  test_case "BGSAVE" `Slow test_bgsave;
+  test_case "BITCOUNT" `Slow test_bitcount;
 ]
 
 let () =

@@ -128,13 +128,11 @@ let rec handle_chunk stack iobuf =
           one_record_read stack (Atomic resp);
           read_on stack
         | false ->
-          Log.Global.error "Bulk LEN %d" bulk_len;
           let retrieved = Iobuf.length iobuf in
           (match bulk_len <= retrieved with
           | true ->
             (* read including the trailing \r\n and discard those *)
             let content = consume_record ~len:(bulk_len + 2) iobuf in
-            Log.Global.error "CONTENT: '%s'" (String.escaped content);
             let resp = Resp.Bulk content in
             one_record_read stack (Atomic resp);
             read_on stack
