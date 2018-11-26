@@ -164,6 +164,23 @@ let exists t ?(keys=[]) key =
   | Resp.Integer n -> return n
   | _ -> Deferred.return @@ Error `Unexpected
 
+let expire t key span =
+  let open Deferred.Result.Let_syntax in
+  let milliseconds = Time.Span.to_ms span in
+  (* rounded to nearest millisecond *)
+  let expire = Printf.sprintf "%.0f" milliseconds in
+  match%bind request t ["PEXPIRE"; key; expire] with
+  | Resp.Integer n -> return n
+  | _ -> Deferred.return @@ Error `Unexpected
+
+let expireat t key dt =
+  let open Deferred.Result.Let_syntax in
+  let since_epoch = dt |> Time.to_span_since_epoch |> Time.Span.to_ms in
+  let expire = Printf.sprintf "%.0f" since_epoch in
+  match%bind request t ["PEXPIREAT"; key; expire] with
+  | Resp.Integer n -> return n
+  | _ -> Deferred.return @@ Error `Unexpected
+
 let init reader writer =
   { reader; writer }
 

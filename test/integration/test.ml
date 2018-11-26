@@ -235,6 +235,37 @@ let test_exists () =
     Alcotest.(check (result int err)) "EXISTS failed" (Ok 1) res;
     return ()
 
+let test_expire () =
+  Orewa.connect ~host @@ fun conn ->
+    let key = random_key () in
+    let value = "aaaa" in
+    let expire = Time.Span.of_ms 200. in
+    let%bind _ = Orewa.set conn ~key value in
+    let%bind res= Orewa.expire conn key expire in
+    Alcotest.(check (result int err)) "Correctly SET expiry" (Ok 1) res;
+    let%bind res = Orewa.exists conn key in
+    Alcotest.(check (result int err)) "Key still exists" (Ok 1) res;
+    let%bind () = after Time.Span.(expire / 0.75) in
+    let%bind res = Orewa.exists conn key in
+    Alcotest.(check (result int err)) "Key has expired" (Ok 0) res;
+    return ()
+
+let test_expireat () =
+  Orewa.connect ~host @@ fun conn ->
+    let key = random_key () in
+    let value = "aaaa" in
+    let expire = Time.Span.of_ms 200. in
+    let at = Time.add (Time.now ()) expire in
+    let%bind _ = Orewa.set conn ~key value in
+    let%bind res = Orewa.expireat conn key at in
+    Alcotest.(check (result int err)) "Correctly SET expiry" (Ok 1) res;
+    let%bind res = Orewa.exists conn key in
+    Alcotest.(check (result int err)) "Key still exists" (Ok 1) res;
+    let%bind () = after Time.Span.(expire / 0.75) in
+    let%bind res = Orewa.exists conn key in
+    Alcotest.(check (result int err)) "Key has expired" (Ok 0) res;
+    return ()
+
 let tests = Alcotest_async.[
   test_case "ECHO" `Slow test_echo;
   test_case "SET" `Slow test_set;
@@ -257,6 +288,8 @@ let tests = Alcotest_async.[
   test_case "SELECT" `Slow test_select;
   test_case "DEL" `Slow test_del;
   test_case "EXISTS" `Slow test_exists;
+  test_case "EXPIRE" `Slow test_expire;
+  test_case "EXPIREAT" `Slow test_expireat;
 ]
 
 let () =
