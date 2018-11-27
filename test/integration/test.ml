@@ -27,13 +27,15 @@ let truncated_string = Alcotest.testable truncated_string_pp String.equal
 let random_state = Random.State.make_self_init ()
 
 let random_key () =
-  let random_char _ =
-    let max = 126 in
-    let min = 33 in
-    let random_int = min + Random.State.int random_state (max-min) in
+  let alphanumeric_char _ =
+    let num = List.range ~stop:`inclusive 48 57 in
+    let upper = List.range ~stop:`inclusive 65 90 in
+    let lower = List.range ~stop:`inclusive 97 122 in
+    let alnum = num @ upper @ lower in
+    let random_int = List.random_element_exn ~random_state alnum in
     Char.of_int_exn random_int
   in
-  let random_string = String.init 7 ~f:random_char in
+  let random_string = String.init 7 ~f:alphanumeric_char in
   Printf.sprintf "redis-integration-%s" random_string
 
 let test_echo () =
@@ -269,9 +271,9 @@ let test_expireat () =
 
 let test_keys () =
   Orewa.connect ~host @@ fun conn ->
-    let prefix = random_key () |> String.escaped in
-    let key1 = prefix ^ (random_key ()) |> String.escaped in
-    let key2 = prefix ^ (random_key ()) |> String.escaped in
+    let prefix = random_key () in
+    let key1 = prefix ^ (random_key ()) in
+    let key2 = prefix ^ (random_key ()) in
     let value = "aaaa" in
     let%bind _ = Orewa.set conn ~key:key1 value in
     let%bind _ = Orewa.set conn ~key:key2 value in
