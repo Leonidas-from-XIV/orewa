@@ -285,7 +285,7 @@ let test_keys () =
       equal (List.sort ~compare:String.compare a) (List.sort ~compare:String.compare b))
     in
     Alcotest.(check (result unordered_list err)) "Returns the right keys" (Ok [key1; key2]) res;
-    let none = random_key () |> String.escaped in
+    let none = random_key () in
     let%bind res = Orewa.keys conn (none ^ "*") in
     Alcotest.(check (result (list string) err)) "Returns no keys" (Ok []) res;
     return ()
