@@ -181,6 +181,18 @@ let expireat t key dt =
   | Resp.Integer n -> return n
   | _ -> Deferred.return @@ Error `Unexpected
 
+let keys t pattern =
+  let open Deferred.Result.Let_syntax in
+  match%bind request t ["KEYS"; pattern] with
+  | Resp.Array xs ->
+    List.map xs ~f:(function
+      | Resp.Bulk key -> Ok key
+      | _ -> Error `Unexpected)
+    |> Result.all
+    |> Deferred.return
+  | _ -> Deferred.return @@ Error `Unexpected
+
+
 let init reader writer =
   { reader; writer }
 

@@ -25,6 +25,7 @@ let truncated_string_pp formatter str =
 let truncated_string = Alcotest.testable truncated_string_pp String.equal
 
 let random_state = Random.State.make_self_init ()
+
 let random_key () =
   let random_char _ =
     let max = 126 in
@@ -266,6 +267,28 @@ let test_expireat () =
     Alcotest.(check (result int err)) "Key has expired" (Ok 0) res;
     return ()
 
+let test_keys () =
+  Orewa.connect ~host @@ fun conn ->
+    let prefix = random_key () |> String.escaped in
+    let key1 = prefix ^ (random_key ()) |> String.escaped in
+    let key2 = prefix ^ (random_key ()) |> String.escaped in
+    let value = "aaaa" in
+    let%bind _ = Orewa.set conn ~key:key1 value in
+    let%bind _ = Orewa.set conn ~key:key2 value in
+    Log.Global.error "Prefix: %s" prefix;
+    let%bind res = Orewa.keys conn (prefix ^ "*") in
+    let exact_list = Alcotest.(list string) in
+    let pp = Alcotest.pp exact_list in
+    let equal = Alcotest.equal exact_list in
+    let unordered_list = Alcotest.testable pp (fun a b ->
+      equal (List.sort ~compare:String.compare a) (List.sort ~compare:String.compare b))
+    in
+    Alcotest.(check (result unordered_list err)) "Returns the right keys" (Ok [key1; key2]) res;
+    let none = random_key () |> String.escaped in
+    let%bind res = Orewa.keys conn (none ^ "*") in
+    Alcotest.(check (result (list string) err)) "Returns no keys" (Ok []) res;
+    return ()
+
 let tests = Alcotest_async.[
   test_case "ECHO" `Slow test_echo;
   test_case "SET" `Slow test_set;
@@ -290,6 +313,7 @@ let tests = Alcotest_async.[
   test_case "EXISTS" `Slow test_exists;
   test_case "EXPIRE" `Slow test_expire;
   test_case "EXPIREAT" `Slow test_expireat;
+  test_case "KEYS" `Slow test_keys;
 ]
 
 let () =

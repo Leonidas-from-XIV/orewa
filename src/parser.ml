@@ -151,8 +151,15 @@ let rec handle_chunk stack iobuf =
         (* Array *)
         let elements = consume_record ~len iobuf |> discard_prefix |> int_of_string in
         Log.Global.error "Array of %d to be read" elements;
-        one_record_read stack (Array (elements, Stack.create ()));
-        handle_chunk stack iobuf
+        (match elements with
+        | 0 ->
+          (* empty arrays just end after the <elements>\r\n, do not expect more args *)
+          let resp = Resp.Array [] in
+          one_record_read stack (Atomic resp);
+          read_on stack
+        | elements ->
+          one_record_read stack (Array (elements, Stack.create ()));
+          handle_chunk stack iobuf)
       | unknown ->
         (* Unknown match *)
         Log.Global.error "Unparseable type tag %C" unknown;
