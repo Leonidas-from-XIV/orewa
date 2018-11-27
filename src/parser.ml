@@ -50,7 +50,7 @@ let rec update_latest_bulk_read stack retrieved s =
     let _ = Stack.pop stack in
     let left_to_read = left_to_read - retrieved in
     (match left_to_read with
-    | 0 -> Log.Global.error "Bulk read finished"
+    | 0 -> Log.Global.debug "Bulk read finished"
     | _ -> ());
     let updated = String (left_to_read, Rope.(rope ^ (of_string s))) in
     Stack.push stack updated
@@ -86,16 +86,16 @@ let rec handle_chunk stack iobuf =
   in
   let read_simple_string ~len constructor =
     let content = consume_record ~len iobuf |> discard_prefix in
-    Log.Global.error "READ: %s" (String.escaped content);
+    Log.Global.debug "READ: %s" (String.escaped content);
     one_record_read stack (Atomic (constructor content));
     read_on stack
   in
 
   match bulk_left_to_read stack with
   | Some left_to_read ->
-    Log.Global.error "There is some bulk to read, current stack: %s" (stack |> Stack.to_list |> List.map ~f:show_nested_resp |> String.concat ~sep:"; ");
+    Log.Global.debug "There is some bulk to read, current stack: %s" (stack |> Stack.to_list |> List.map ~f:show_nested_resp |> String.concat ~sep:"; ");
     let retrieved = Iobuf.length iobuf in
-    Log.Global.error "Bulk left to read: %d bytes, retrieved %d bytes" left_to_read retrieved;
+    Log.Global.debug "Bulk left to read: %d bytes, retrieved %d bytes" left_to_read retrieved;
     (match left_to_read <= retrieved with
     | true ->
         let content = Iobuf.Consume.stringo ~len:left_to_read iobuf in
@@ -150,7 +150,7 @@ let rec handle_chunk stack iobuf =
       | '*' ->
         (* Array *)
         let elements = consume_record ~len iobuf |> discard_prefix |> int_of_string in
-        Log.Global.error "Array of %d to be read" elements;
+        Log.Global.debug "Array of %d to be read" elements;
         (match elements with
         | 0 ->
           (* empty arrays just end after the <elements>\r\n, do not expect more args *)
@@ -162,8 +162,8 @@ let rec handle_chunk stack iobuf =
           handle_chunk stack iobuf)
       | unknown ->
         (* Unknown match *)
-        Log.Global.error "Unparseable type tag %C" unknown;
-        Log.Global.error "Failing stack: %s" (stack |> Stack.to_list |> List.map ~f:show_nested_resp |> String.concat ~sep:"; ");
+        Log.Global.debug "Unparseable type tag %C" unknown;
+        Log.Global.debug "Failing stack: %s" (stack |> Stack.to_list |> List.map ~f:show_nested_resp |> String.concat ~sep:"; ");
         return @@ `Stop ()
 
 type resp_list = Resp.t list [@@deriving show]
@@ -171,9 +171,9 @@ type resp_list = Resp.t list [@@deriving show]
 let read_resp reader =
   let stack = Stack.create () in
   let%bind res = Reader.read_one_iobuf_at_a_time reader ~handle_chunk:(handle_chunk stack) in
-  Log.Global.error "Stack is %s " (stack |> Stack.to_list |> List.map ~f:show_nested_resp |> String.concat ~sep:" ");
+  Log.Global.debug "Stack is %s " (stack |> Stack.to_list |> List.map ~f:show_nested_resp |> String.concat ~sep:" ");
   let resps = unwind_stack stack in
-  Log.Global.error "Stack unwound to: %s" (show_resp_list resps);
+  Log.Global.debug "Stack unwound to: %s" (show_resp_list resps);
   match List.hd resps with
   | None -> return @@ Error `Unexpected
   | Some resp ->

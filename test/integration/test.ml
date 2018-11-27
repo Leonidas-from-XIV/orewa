@@ -275,7 +275,6 @@ let test_keys () =
     let value = "aaaa" in
     let%bind _ = Orewa.set conn ~key:key1 value in
     let%bind _ = Orewa.set conn ~key:key2 value in
-    Log.Global.error "Prefix: %s" prefix;
     let%bind res = Orewa.keys conn (prefix ^ "*") in
     let exact_list = Alcotest.(list string) in
     let pp = Alcotest.pp exact_list in
