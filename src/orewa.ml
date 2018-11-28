@@ -224,6 +224,13 @@ let move t key db =
   | Resp.Integer 1 -> return true
   | _ -> Deferred.return @@ Error `Unexpected
 
+let persist t key =
+  let open Deferred.Result.Let_syntax in
+  match%bind request t ["PERSIST"; key] with
+  | Resp.Integer 0 -> return false
+  | Resp.Integer 1 -> return true
+  | _ -> Deferred.return @@ Error `Unexpected
+
 let init reader writer =
   { reader; writer }
 

@@ -326,6 +326,20 @@ let test_move () =
     Alcotest.(check (result bool err)) "MOVE failed as expected" (Ok false) res;
     return ()
 
+let test_persist () =
+  Orewa.connect ~host @@ fun conn ->
+    let key = random_key () in
+    let missing_key = random_key () in
+    let value = "aaaa" in
+    let%bind _ = Orewa.set conn ~expire:(Time.Span.of_sec 30.) ~key value in
+    let%bind res = Orewa.persist conn key in
+    Alcotest.(check (result bool err)) "Set key to persistent" (Ok true) res;
+    let%bind res = Orewa.persist conn key in
+    Alcotest.(check (result bool err)) "Key couldn't be persisted twice" (Ok false) res;
+    let%bind res = Orewa.persist conn missing_key in
+    Alcotest.(check (result bool err)) "Missing key couldn't be persisted" (Ok false) res;
+    return ()
+
 let tests = Alcotest_async.[
   test_case "ECHO" `Slow test_echo;
   test_case "SET" `Slow test_set;
@@ -353,6 +367,7 @@ let tests = Alcotest_async.[
   test_case "KEYS" `Slow test_keys;
   test_case "SCAN" `Slow test_scan;
   test_case "MOVE" `Slow test_move;
+  test_case "PERSIST" `Slow test_persist;
 ]
 
 let () =
