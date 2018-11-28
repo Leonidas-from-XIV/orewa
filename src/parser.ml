@@ -27,13 +27,22 @@ let rec show_nested_resp = function
     Printf.sprintf "Array[%d](%s)" to_read v
   | String (left, _) -> Printf.sprintf "String[%d](..)" left
 
+let rec unfinished_array stack =
+  match Stack.top stack with
+  | Some Array (0, stack) -> unfinished_array stack
+  | Some Array (n, _) when n > 0 -> true
+  | _ -> false
+
 let rec one_record_read stack e =
   match Stack.top stack with
   | None
   | Some Atomic _
-  | Some String _
-  | Some Array (0, _) ->
+  | Some String _ ->
     Stack.push stack e
+  | Some Array (0, substack) ->
+    (match unfinished_array substack with
+    | false -> Stack.push stack e
+    | true -> one_record_read substack e)
   | Some Array (left_to_read, inner_stack) ->
     let _ = Stack.pop stack in
     one_record_read inner_stack e;
@@ -66,11 +75,6 @@ let rec unwind_stack stack =
       Resp.Bulk (String.subo ~len:((String.length s) - 2) s)
     | Array (_, stack) ->
       Resp.Array (List.rev (unwind_stack stack)))
-
-let unfinished_array stack =
-  match Stack.top stack with
-  | Some Array (n, _) when n > 0 -> true
-  | _ -> false
 
 let rec bulk_left_to_read stack =
   match Stack.top stack with
@@ -171,7 +175,7 @@ type resp_list = Resp.t list [@@deriving show]
 let read_resp reader =
   let stack = Stack.create () in
   let%bind res = Reader.read_one_iobuf_at_a_time reader ~handle_chunk:(handle_chunk stack) in
-  Log.Global.debug "Stack is %s " (stack |> Stack.to_list |> List.map ~f:show_nested_resp |> String.concat ~sep:" ");
+  Log.Global.debug "Stack is %s " (stack |> Stack.to_list |> List.map ~f:show_nested_resp |> String.concat ~sep:", ");
   let resps = unwind_stack stack in
   Log.Global.debug "Stack unwound to: %s" (show_resp_list resps);
   match List.hd resps with

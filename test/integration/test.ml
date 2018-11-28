@@ -18,6 +18,11 @@ let se = Alcotest.(result string err)
 let soe = Alcotest.(result (option string) err)
 let some_string = Alcotest.testable String.pp (const (const true))
 
+let unordered_string_list = Alcotest.(testable (pp (list string)) (fun a b ->
+  let equal = equal (list string) in
+  let compare = String.compare in
+  equal  (List.sort ~compare a) (List.sort ~compare b)))
+
 let truncated_string_pp formatter str =
   let str = Printf.sprintf "%s(...)" (String.prefix str 10) in
   Format.pp_print_text formatter str
@@ -278,16 +283,29 @@ let test_keys () =
     let%bind _ = Orewa.set conn ~key:key1 value in
     let%bind _ = Orewa.set conn ~key:key2 value in
     let%bind res = Orewa.keys conn (prefix ^ "*") in
-    let exact_list = Alcotest.(list string) in
-    let pp = Alcotest.pp exact_list in
-    let equal = Alcotest.equal exact_list in
-    let unordered_list = Alcotest.testable pp (fun a b ->
-      equal (List.sort ~compare:String.compare a) (List.sort ~compare:String.compare b))
-    in
-    Alcotest.(check (result unordered_list err)) "Returns the right keys" (Ok [key1; key2]) res;
+    Alcotest.(check (result unordered_string_list err)) "Returns the right keys" (Ok [key1; key2]) res;
     let none = random_key () in
     let%bind res = Orewa.keys conn (none ^ "*") in
     Alcotest.(check (result (list string) err)) "Returns no keys" (Ok []) res;
+    return ()
+
+let test_scan () =
+  Orewa.connect ~host @@ fun conn ->
+    let prefix = random_key () in
+    let value = "aaaa" in
+    let count = 20 in
+    let%bind expected_keys = Deferred.List.map (List.range 0 count) ~f:(fun index ->
+      let key = Printf.sprintf "%s:%d" prefix index in
+      let%bind _ = Orewa.set conn ~key value in
+      return key)
+    in
+    let pattern = prefix ^ "*" in
+    let pipe = Orewa.scan ~pattern ~count conn in
+    let%bind q = Pipe.read_all pipe in
+    let res = Queue.to_list q in
+    Alcotest.(check unordered_string_list)
+      "Returns the right keys"
+      expected_keys res;
     return ()
 
 let tests = Alcotest_async.[
@@ -315,9 +333,11 @@ let tests = Alcotest_async.[
   test_case "EXPIRE" `Slow test_expire;
   test_case "EXPIREAT" `Slow test_expireat;
   test_case "KEYS" `Slow test_keys;
+  test_case "SCAN" `Slow test_scan;
 ]
 
 let () =
+  Log.Global.set_level `Debug;
   Alcotest.run Caml.__MODULE__ [
     ("integration", tests);
   ]

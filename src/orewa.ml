@@ -192,6 +192,30 @@ let keys t pattern =
     |> Deferred.return
   | _ -> Deferred.return @@ Error `Unexpected
 
+let scan ?pattern ?count t =
+  let pattern = match pattern with
+    | Some pattern -> ["MATCH"; pattern]
+    | None -> []
+  in
+  let count = match count with
+    | Some count -> ["COUNT"; string_of_int count]
+    | None -> []
+  in
+  Pipe.create_reader ~close_on_exception:false @@ fun writer ->
+    Deferred.repeat_until_finished "0" @@ fun cursor ->
+      match%bind request t (["SCAN"; cursor] @ pattern @ count) with
+      | Ok Resp.Array [Resp.Bulk cursor; Resp.Array from] ->
+        let from = from
+          |> List.map ~f:(function
+            | Resp.Bulk s -> s
+            | _ -> failwith "unexpected")
+          |> Queue.of_list
+        in
+        let%bind () = Pipe.transfer_in writer ~from in
+        (match cursor with
+          | "0" -> return @@ `Finished ()
+          | cursor -> return @@ `Repeat cursor)
+      | _ -> failwith "unexpected"
 
 let init reader writer =
   { reader; writer }
