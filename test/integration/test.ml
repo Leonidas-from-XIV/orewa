@@ -57,7 +57,7 @@ let test_set () =
     Alcotest.(check ue) "SET failed" (Ok ()) res;
     return ()
 
-let test_set_get () =
+let test_get () =
   Orewa.connect ~host @@ fun conn ->
     let key = random_key () in
     let value = random_key () in
@@ -311,7 +311,7 @@ let test_scan () =
 let tests = Alcotest_async.[
   test_case "ECHO" `Slow test_echo;
   test_case "SET" `Slow test_set;
-  test_case "GET" `Slow test_set_get;
+  test_case "GET" `Slow test_get;
   test_case "Large SET/GET" `Slow test_large_set_get;
   test_case "SET with expiry" `Slow test_set_expiry;
   test_case "LPUSH" `Slow test_lpush;
