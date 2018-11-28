@@ -217,6 +217,13 @@ let scan ?pattern ?count t =
           | cursor -> return @@ `Repeat cursor)
       | _ -> failwith "unexpected"
 
+let move t key db =
+  let open Deferred.Result.Let_syntax in
+  match%bind request t ["MOVE"; key; (string_of_int db)] with
+  | Resp.Integer 0 -> return false
+  | Resp.Integer 1 -> return true
+  | _ -> Deferred.return @@ Error `Unexpected
+
 let init reader writer =
   { reader; writer }
 

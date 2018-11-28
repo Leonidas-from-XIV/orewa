@@ -308,6 +308,24 @@ let test_scan () =
       expected_keys res;
     return ()
 
+let test_move () =
+  Orewa.connect ~host @@ fun conn ->
+    let key = random_key () in
+    let value = "aaaa" in
+    let other_db = 4 in
+    let original_db = 0 in
+    let%bind _ = Orewa.select conn original_db in
+    let%bind _ = Orewa.set conn ~key value in
+    let%bind res = Orewa.move conn key other_db in
+    Alcotest.(check (result bool err)) "Successfully moved" (Ok true) res;
+    let%bind _ = Orewa.select conn other_db in
+    let%bind res = Orewa.get conn key in
+    Alcotest.(check soe) "Key in other db" (Ok (Some value)) res;
+    let%bind _ = Orewa.select conn original_db in
+    let%bind res = Orewa.move conn key other_db in
+    Alcotest.(check (result bool err)) "MOVE failed as expected" (Ok false) res;
+    return ()
+
 let tests = Alcotest_async.[
   test_case "ECHO" `Slow test_echo;
   test_case "SET" `Slow test_set;
@@ -334,6 +352,7 @@ let tests = Alcotest_async.[
   test_case "EXPIREAT" `Slow test_expireat;
   test_case "KEYS" `Slow test_keys;
   test_case "SCAN" `Slow test_scan;
+  test_case "MOVE" `Slow test_move;
 ]
 
 let () =
