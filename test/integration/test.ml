@@ -363,6 +363,19 @@ let test_rename () =
     Alcotest.(check soe) "Key gone in old location" (Ok None) res;
     return ()
 
+let test_renamenx () =
+  Orewa.connect ~host @@ fun conn ->
+    let key = random_key () in
+    let new_key = random_key () in
+    let value = "aaaa" in
+    let%bind _ = Orewa.set conn ~key value in
+    let%bind res = Orewa.renamenx conn ~key new_key in
+    Alcotest.(check (result bool err)) "Successfully renamed" (Ok true) res;
+    let%bind _ = Orewa.set conn ~key value in
+    let%bind res = Orewa.renamenx conn ~key new_key in
+    Alcotest.(check (result bool err)) "Renaming to existing key shouldn't work" (Ok false) res;
+    return ()
+
 let tests = Alcotest_async.[
   test_case "ECHO" `Slow test_echo;
   test_case "SET" `Slow test_set;
@@ -393,6 +406,7 @@ let tests = Alcotest_async.[
   test_case "PERSIST" `Slow test_persist;
   test_case "RANDOMKEY" `Slow test_randomkey;
   test_case "RENAME" `Slow test_rename;
+  test_case "RENAMENX" `Slow test_renamenx;
 ]
 
 let () =

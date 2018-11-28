@@ -243,6 +243,13 @@ let rename t key newkey =
   | Resp.String "OK" -> return ()
   | _ -> Deferred.return @@ Error `Unexpected
 
+let renamenx t ~key newkey =
+  let open Deferred.Result.Let_syntax in
+  match%bind request t ["RENAMENX"; key; newkey] with
+  | Resp.Integer 0 -> return false
+  | Resp.Integer 1 -> return true
+  | _ -> Deferred.return @@ Error `Unexpected
+
 let init reader writer =
   { reader; writer }
 
