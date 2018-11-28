@@ -349,6 +349,20 @@ let test_randomkey () =
     Alcotest.(check (result some_string err)) "Got random key" (Ok "anything") res;
     return ()
 
+let test_rename () =
+  Orewa.connect ~host @@ fun conn ->
+    let key = random_key () in
+    let new_key = random_key () in
+    let value = "aaaa" in
+    let%bind _ = Orewa.set conn ~key value in
+    let%bind res = Orewa.rename conn key new_key in
+    Alcotest.(check ue) "Successfully renamed" (Ok ()) res;
+    let%bind res = Orewa.get conn new_key in
+    Alcotest.(check soe) "Key exists in new location" (Ok (Some value)) res;
+    let%bind res = Orewa.get conn key in
+    Alcotest.(check soe) "Key gone in old location" (Ok None) res;
+    return ()
+
 let tests = Alcotest_async.[
   test_case "ECHO" `Slow test_echo;
   test_case "SET" `Slow test_set;
@@ -378,6 +392,7 @@ let tests = Alcotest_async.[
   test_case "MOVE" `Slow test_move;
   test_case "PERSIST" `Slow test_persist;
   test_case "RANDOMKEY" `Slow test_randomkey;
+  test_case "RENAME" `Slow test_rename;
 ]
 
 let () =

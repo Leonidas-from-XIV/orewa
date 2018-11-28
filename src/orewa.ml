@@ -237,6 +237,12 @@ let randomkey t =
   | Resp.Bulk s -> return s
   | _ -> Deferred.return @@ Error `Unexpected
 
+let rename t key newkey =
+  let open Deferred.Result.Let_syntax in
+  match%bind request t ["RENAME"; key; newkey] with
+  | Resp.String "OK" -> return ()
+  | _ -> Deferred.return @@ Error `Unexpected
+
 let init reader writer =
   { reader; writer }
 
