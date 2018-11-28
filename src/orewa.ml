@@ -231,6 +231,12 @@ let persist t key =
   | Resp.Integer 1 -> return true
   | _ -> Deferred.return @@ Error `Unexpected
 
+let randomkey t =
+  let open Deferred.Result.Let_syntax in
+  match%bind request t ["RANDOMKEY"] with
+  | Resp.Bulk s -> return s
+  | _ -> Deferred.return @@ Error `Unexpected
+
 let init reader writer =
   { reader; writer }
 

@@ -340,6 +340,15 @@ let test_persist () =
     Alcotest.(check (result bool err)) "Missing key couldn't be persisted" (Ok false) res;
     return ()
 
+let test_randomkey () =
+  Orewa.connect ~host @@ fun conn ->
+    let key = random_key () in
+    let value = "aaaa" in
+    let%bind _ = Orewa.set conn ~key value in
+    let%bind res = Orewa.randomkey conn in
+    Alcotest.(check (result some_string err)) "Got random key" (Ok "anything") res;
+    return ()
+
 let tests = Alcotest_async.[
   test_case "ECHO" `Slow test_echo;
   test_case "SET" `Slow test_set;
@@ -368,6 +377,7 @@ let tests = Alcotest_async.[
   test_case "SCAN" `Slow test_scan;
   test_case "MOVE" `Slow test_move;
   test_case "PERSIST" `Slow test_persist;
+  test_case "RANDOMKEY" `Slow test_randomkey;
 ]
 
 let () =
