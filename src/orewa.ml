@@ -318,6 +318,24 @@ let dump t key =
   | Resp.Null -> return None
   | _ -> Deferred.return @@ Error `Unexpected
 
+let restore t ~key ?ttl ?replace value =
+  let open Deferred.Result.Let_syntax in
+  let ttl = match ttl with
+    | None -> "0"
+    | Some span ->
+      span
+      |> Time.Span.to_ms
+      |> Printf.sprintf ".0%f"
+  in
+  let replace = match replace with
+    | Some true -> ["REPLACE"]
+    | Some false
+    | None -> []
+  in
+  match%bind request t (["RESTORE"; key; ttl; value] @ replace) with
+  | Resp.String "OK" -> return ()
+  | _ -> Deferred.return @@ Error `Unexpected
+
 let init reader writer =
   { reader; writer }
 

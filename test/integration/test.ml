@@ -461,6 +461,28 @@ let test_dump () =
     Alcotest.(check dump_result) "Dumping missing key" (Ok None) res;
     return ()
 
+let test_restore () =
+  Orewa.connect ~host @@ fun conn ->
+    let key = random_key () in
+    let list_key = random_key () in
+    let new_key = random_key () in
+    let value = random_key () in
+    let%bind _ = Orewa.set conn ~key value in
+    let%bind res = Orewa.dump conn key in
+    let dumped = Option.value_exn (Option.value_exn (Result.ok res)) in
+    let%bind res = Orewa.restore conn ~key:new_key dumped in
+    Alcotest.(check ue) "Restoring key" (Ok ()) res;
+    let%bind res = Orewa.get conn new_key in
+    Alcotest.(check soe) "Correct value restored" (Ok (Some value)) res;
+    let%bind _ = Orewa.lpush conn ~key:list_key value in
+    let%bind res = Orewa.dump conn list_key in
+    let dumped = Option.value_exn (Option.value_exn (Result.ok res)) in
+    let%bind res = Orewa.restore conn ~key:new_key ~replace:true dumped in
+    Alcotest.(check ue) "Restoring key" (Ok ()) res;
+    let%bind res = Orewa.lrange conn ~key:new_key ~start:0 ~stop:(-1) in
+    Alcotest.(check (result (list string) err)) "Correct value restored" (Ok [value]) res;
+    return ()
+
 let tests = Alcotest_async.[
   test_case "ECHO" `Slow test_echo;
   test_case "SET" `Slow test_set;
@@ -496,6 +518,7 @@ let tests = Alcotest_async.[
   test_case "TTL" `Slow test_ttl;
   test_case "TYPE" `Slow test_type';
   test_case "DUMP" `Slow test_dump;
+  test_case "RESTORE" `Slow test_restore;
 ]
 
 let () =
