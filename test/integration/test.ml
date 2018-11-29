@@ -7,7 +7,7 @@ let host = "localhost"
 let exceeding_read_buffer = 128 * 1024
 
 module Orewa_error = struct
-  type t = [ `Connection_closed | `Eof | `Unexpected | `Redis_error of string] [@@deriving show, eq]
+  type t = [ `Connection_closed | `Eof | `Unexpected | `Redis_error of string | `No_such_key of string | `Not_expiring of string ] [@@deriving show, eq]
 end
 
 let err = Alcotest.testable Orewa_error.pp Orewa_error.equal
@@ -416,6 +416,24 @@ let test_sort () =
     Alcotest.(check (result (list string) err)) "Sorted correctly in extra key" (Ok integer_sorted) res;
     return ()
 
+let test_ttl () =
+  Orewa.connect ~host @@ fun conn ->
+    let key = random_key () in
+    let missing_key = random_key () in
+    let persistent_key = random_key () in
+    let%bind res = Orewa.ttl conn missing_key in
+    let span = Alcotest.testable Time.Span.pp Time.Span.equal in
+    Alcotest.(check (result span err)) "No TTL on missing keys" (Error (`No_such_key missing_key)) res;
+    let%bind _ = Orewa.set conn ~key:persistent_key "aaaa" in
+    let%bind res = Orewa.ttl conn persistent_key in
+    Alcotest.(check (result span err)) "No TTL on persistent key" (Error (`Not_expiring persistent_key)) res;
+    let expire = Time.Span.of_ms 200. in
+    let%bind _ = Orewa.set conn ~expire ~key "aaaa" in
+    let subspan = Alcotest.testable Time.Span.pp (fun a b -> Time.Span.(a <= b)) in
+    let%bind res = Orewa.ttl conn key in
+    Alcotest.(check (result subspan err)) "TTL not larger than before" (Ok expire) res;
+    return ()
+
 let tests = Alcotest_async.[
   test_case "ECHO" `Slow test_echo;
   test_case "SET" `Slow test_set;
@@ -448,6 +466,7 @@ let tests = Alcotest_async.[
   test_case "RENAME" `Slow test_rename;
   test_case "RENAMENX" `Slow test_renamenx;
   test_case "SORT" `Slow test_sort;
+  test_case "TTL" `Slow test_ttl;
 ]
 
 let () =

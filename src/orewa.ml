@@ -296,6 +296,13 @@ let sort t ?by ?limit ?get ?order ?alpha ?store key =
     |> Deferred.return
   | _ -> Deferred.return @@ Error `Unexpected
 
+let ttl t key =
+  let open Deferred.Result.Let_syntax in
+  match%bind request t ["PTTL"; key] with
+  | Resp.Integer (-2) -> Deferred.return @@ Error (`No_such_key key)
+  | Resp.Integer (-1) -> Deferred.return @@ Error (`Not_expiring key)
+  | Resp.Integer ms -> ms |> float_of_int |> Time.Span.of_ms |> return
+  | _ -> Deferred.return @@ Error `Unexpected
 
 let init reader writer =
   { reader; writer }
