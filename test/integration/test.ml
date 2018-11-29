@@ -429,7 +429,9 @@ let test_ttl () =
     Alcotest.(check (result span err)) "No TTL on persistent key" (Error (`Not_expiring persistent_key)) res;
     let expire = Time.Span.of_ms 200. in
     let%bind _ = Orewa.set conn ~expire ~key "aaaa" in
-    let subspan = Alcotest.testable Time.Span.pp (fun a b -> Time.Span.(a <= b)) in
+    let subspan = Alcotest.testable Time.Span.pp (fun a b ->
+      Time.Span.(a <= expire) && Time.Span.(b <= expire))
+    in
     let%bind res = Orewa.ttl conn key in
     Alcotest.(check (result subspan err)) "TTL not larger than before" (Ok expire) res;
     return ()
