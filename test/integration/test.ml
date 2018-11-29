@@ -376,6 +376,46 @@ let test_renamenx () =
     Alcotest.(check (result bool err)) "Renaming to existing key shouldn't work" (Ok false) res;
     return ()
 
+let test_sort () =
+  Orewa.connect ~host @@ fun conn ->
+    let key = random_key () in
+    let randomly_ordered = List.range 0 10 |> List.map ~f:(fun _ ->
+      Random.State.int random_state 1000)
+    in
+    let%bind () = Deferred.List.iter randomly_ordered ~f:(fun value ->
+      let%bind _ = Orewa.lpush conn ~key (string_of_int value) in
+      return ())
+    in
+    let%bind res = Orewa.sort conn key in
+    let sort_result = Alcotest.testable
+      (fun formatter v ->
+        let v = match v with
+          | `Count n -> Printf.sprintf "`Count %d" n
+          | `Sorted xs -> Fmt.strf "`Sorted %a" Fmt.(list string) xs
+        in
+        Format.pp_print_text formatter v)
+      (fun a b -> a = b)
+    in
+    let integer_sorted = randomly_ordered
+      |> List.sort ~compare:Int.compare
+      |> List.map ~f:string_of_int
+    in
+    Alcotest.(check (result sort_result err)) "Sorted by integer value" (Ok (`Sorted integer_sorted)) res;
+
+    let%bind res = Orewa.sort conn ~alpha:true key in
+    let alpha_sorted = randomly_ordered
+      |> List.map ~f:string_of_int
+      |> List.sort ~compare:String.compare
+    in
+    Alcotest.(check (result sort_result err)) "Sorted alphabetically" (Ok (`Sorted alpha_sorted)) res;
+
+    let store = random_key () in
+    let%bind res = Orewa.sort conn ~store key in
+    Alcotest.(check (result sort_result err)) "Sorted all elements" (Ok (`Count (List.length randomly_ordered))) res;
+    let%bind res = Orewa.lrange conn ~key:store ~start:0 ~stop:(-1) in
+    Alcotest.(check (result (list string) err)) "Sorted correctly in extra key" (Ok integer_sorted) res;
+    return ()
+
 let tests = Alcotest_async.[
   test_case "ECHO" `Slow test_echo;
   test_case "SET" `Slow test_set;
@@ -407,6 +447,7 @@ let tests = Alcotest_async.[
   test_case "RANDOMKEY" `Slow test_randomkey;
   test_case "RENAME" `Slow test_rename;
   test_case "RENAMENX" `Slow test_renamenx;
+  test_case "SORT" `Slow test_sort;
 ]
 
 let () =

@@ -250,6 +250,53 @@ let renamenx t ~key newkey =
   | Resp.Integer 1 -> return true
   | _ -> Deferred.return @@ Error `Unexpected
 
+type order = Asc | Desc
+
+let sort t ?by ?limit ?get ?order ?alpha ?store key =
+  let open Deferred.Result.Let_syntax in
+  let by = match by with
+    | None -> []
+    | Some by -> ["BY"; by]
+  in
+  let limit = match limit with
+    | None -> []
+    | Some (offset, count) -> ["LIMIT"; (string_of_int offset); (string_of_int count)]
+  in
+  let get = match get with
+    | None -> []
+    | Some patterns ->
+      patterns
+      |> List.map ~f:(fun pattern -> ["GET"; pattern])
+      |> List.concat
+  in
+  let order = match order with
+    | None -> []
+    | Some Asc -> ["ASC"]
+    | Some Desc -> ["DESC"]
+  in
+  let alpha = match alpha with
+    | None -> []
+    | Some false -> []
+    | Some true -> ["ALPHA"]
+  in
+  let store = match store with
+    | None -> []
+    | Some destination -> ["STORE"; destination]
+  in
+  let q = [["SORT"; key]; by; limit; get; order; alpha; store] |> List.concat in
+  match%bind request t q with
+  | Resp.Integer count -> return @@ `Count count
+  | Resp.Array sorted ->
+    sorted
+    |>List.map ~f:(function
+      | Resp.Bulk v -> Ok v
+      | _ -> Error `Unexpected)
+    |> Result.all
+    |> Result.map ~f:(fun x -> `Sorted x)
+    |> Deferred.return
+  | _ -> Deferred.return @@ Error `Unexpected
+
+
 let init reader writer =
   { reader; writer }
 
