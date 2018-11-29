@@ -449,6 +449,18 @@ let test_type' () =
     Alcotest.(check soe) "No hits" (Ok None) res;
     return ()
 
+let test_dump () =
+  Orewa.connect ~host @@ fun conn ->
+    let key = random_key () in
+    let missing_key = random_key () in
+    let%bind _ = Orewa.set conn ~key "aaaa" in
+    let%bind res = Orewa.dump conn key in
+    let dump_result = Alcotest.(result (option some_string) err) in
+    Alcotest.(check dump_result) "Dumping string key" (Ok (Some "anything")) res;
+    let%bind res = Orewa.dump conn missing_key in
+    Alcotest.(check dump_result) "Dumping missing key" (Ok None) res;
+    return ()
+
 let tests = Alcotest_async.[
   test_case "ECHO" `Slow test_echo;
   test_case "SET" `Slow test_set;
@@ -483,6 +495,7 @@ let tests = Alcotest_async.[
   test_case "SORT" `Slow test_sort;
   test_case "TTL" `Slow test_ttl;
   test_case "TYPE" `Slow test_type';
+  test_case "DUMP" `Slow test_dump;
 ]
 
 let () =

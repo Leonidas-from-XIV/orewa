@@ -311,6 +311,13 @@ let type' t key =
   | Resp.String s -> return @@ Some s
   | _ -> Deferred.return @@ Error `Unexpected
 
+let dump t key =
+  let open Deferred.Result.Let_syntax in
+  match%bind request t ["DUMP"; key] with
+  | Resp.Bulk bulk -> return @@ Some bulk
+  | Resp.Null -> return None
+  | _ -> Deferred.return @@ Error `Unexpected
+
 let init reader writer =
   { reader; writer }
 
