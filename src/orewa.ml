@@ -304,6 +304,13 @@ let ttl t key =
   | Resp.Integer ms -> ms |> float_of_int |> Time.Span.of_ms |> return
   | _ -> Deferred.return @@ Error `Unexpected
 
+let type' t key =
+  let open Deferred.Result.Let_syntax in
+  match%bind request t ["TYPE"; key] with
+  | Resp.String "none" -> return None
+  | Resp.String s -> return @@ Some s
+  | _ -> Deferred.return @@ Error `Unexpected
+
 let init reader writer =
   { reader; writer }
 

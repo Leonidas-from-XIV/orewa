@@ -434,6 +434,21 @@ let test_ttl () =
     Alcotest.(check (result subspan err)) "TTL not larger than before" (Ok expire) res;
     return ()
 
+let test_type' () =
+  Orewa.connect ~host @@ fun conn ->
+    let string_key = random_key () in
+    let list_key = random_key () in
+    let missing_key = random_key () in
+    let%bind _ = Orewa.set conn ~key:string_key "aaaa" in
+    let%bind _ = Orewa.lpush conn ~key:list_key "aaaa" in
+    let%bind res = Orewa.type' conn string_key in
+    Alcotest.(check soe) "Finds string" (Ok (Some "string")) res;
+    let%bind res = Orewa.type' conn list_key in
+    Alcotest.(check soe) "Finds list" (Ok (Some "list")) res;
+    let%bind res = Orewa.type' conn missing_key in
+    Alcotest.(check soe) "No hits" (Ok None) res;
+    return ()
+
 let tests = Alcotest_async.[
   test_case "ECHO" `Slow test_echo;
   test_case "SET" `Slow test_set;
@@ -467,6 +482,7 @@ let tests = Alcotest_async.[
   test_case "RENAMENX" `Slow test_renamenx;
   test_case "SORT" `Slow test_sort;
   test_case "TTL" `Slow test_ttl;
+  test_case "TYPE" `Slow test_type';
 ]
 
 let () =
