@@ -83,6 +83,17 @@ let mset t alist =
   | Resp.String "OK" -> return ()
   | _ -> Deferred.return @@ Error `Unexpected
 
+let msetnx t alist =
+  let open Deferred.Result.Let_syntax in
+  let payload = alist
+    |> List.map ~f:(fun (k, v) -> [k; v])
+    |> List.concat
+  in
+  match%bind request t ("MSETNX" :: payload) with
+  | Resp.Integer 1 -> return true
+  | Resp.Integer 0 -> return false
+  | _ -> Deferred.return @@ Error `Unexpected
+
 let lpush t ~key value =
   let open Deferred.Result.Let_syntax in
   match%bind request t ["LPUSH"; key; value] with

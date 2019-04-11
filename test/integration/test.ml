@@ -77,6 +77,25 @@ let test_mget () =
     Alcotest.(check (result (list (option string)) err)) "Correct response" (Ok [None; Some value; Some value]) res;
     return ()
 
+let test_msetnx () =
+  Orewa.connect ~host @@ fun conn ->
+    let key = random_key () in
+    let value = random_key () in
+    let key' = random_key () in
+    let value' = random_key () in
+    let key'' = random_key () in
+    let value'' = random_key () in
+    let be = Alcotest.(result bool err) in
+    let%bind res = Orewa.msetnx conn [(key, value); (key', value')] in
+    Alcotest.(check be) "Setting once succeeded" (Ok true) res;
+    let%bind res = Orewa.mget conn [key; key'] in
+    Alcotest.(check (result (list (option string)) err)) "Keys as expected" (Ok [Some value; Some value']) res;
+    let%bind res = Orewa.msetnx conn [(key', value''); (key'', value'')] in
+    Alcotest.(check be) "Setting once succeeded" (Ok false) res;
+    let%bind res = Orewa.mget conn [key; key'; key''] in
+    Alcotest.(check (result (list (option string)) err)) "Keys as expected" (Ok [Some value; Some value'; None]) res;
+    return ()
+
 let test_mset () =
   Orewa.connect ~host @@ fun conn ->
     let key = random_key () in
@@ -555,6 +574,7 @@ let tests = Alcotest_async.[
   test_case "GET" `Slow test_get;
   test_case "MGET" `Slow test_mget;
   test_case "MSET" `Slow test_mset;
+  test_case "MSETNX" `Slow test_msetnx;
   test_case "GETRANGE" `Slow test_getrange;
   test_case "Large SET/GET" `Slow test_large_set_get;
   test_case "SET with expiry" `Slow test_set_expiry;
