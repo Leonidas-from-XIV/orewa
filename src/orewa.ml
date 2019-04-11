@@ -73,6 +73,16 @@ let mget t keys =
       |> Deferred.return
   | _ -> Deferred.return @@ Error `Unexpected
 
+let mset t alist =
+  let open Deferred.Result.Let_syntax in
+  let payload = alist
+    |> List.map ~f:(fun (k, v) -> [k; v])
+    |> List.concat
+  in
+  match%bind request t ("MSET" :: payload) with
+  | Resp.String "OK" -> return ()
+  | _ -> Deferred.return @@ Error `Unexpected
+
 let lpush t ~key value =
   let open Deferred.Result.Let_syntax in
   match%bind request t ["LPUSH"; key; value] with

@@ -77,6 +77,18 @@ let test_mget () =
     Alcotest.(check (result (list (option string)) err)) "Correct response" (Ok [None; Some value; Some value]) res;
     return ()
 
+let test_mset () =
+  Orewa.connect ~host @@ fun conn ->
+    let key = random_key () in
+    let value = random_key () in
+    let key' = random_key () in
+    let value' = random_key () in
+    let%bind res = Orewa.mset conn [(key, value); (key', value')] in
+    Alcotest.(check ue) "Correct response" (Ok ()) res;
+    let%bind res = Orewa.mget conn [key; key'] in
+    Alcotest.(check (result (list (option string)) err)) "Correct response" (Ok [Some value; Some value']) res;
+    return ()
+
 let test_getrange () =
   Orewa.connect ~host @@ fun conn ->
     let key = random_key () in
@@ -542,6 +554,7 @@ let tests = Alcotest_async.[
   test_case "SET" `Slow test_set;
   test_case "GET" `Slow test_get;
   test_case "MGET" `Slow test_mget;
+  test_case "MSET" `Slow test_mset;
   test_case "GETRANGE" `Slow test_getrange;
   test_case "Large SET/GET" `Slow test_large_set_get;
   test_case "SET with expiry" `Slow test_set_expiry;
