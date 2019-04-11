@@ -177,6 +177,22 @@ let test_bitop () =
     Alcotest.(check (result int err)) "BITOP failed" expected res;
     return ()
 
+let test_bitpos () =
+  Orewa.connect ~host @@ fun conn ->
+    let key = random_key () in
+    let value = "\000\001\000\000\001" in
+    let expected = Ok (Some 15) in
+    let%bind _ = Orewa.set conn ~key value in
+    let%bind res = Orewa.bitpos conn key One in
+    Alcotest.(check (result (option int) err)) "BITPOS failed" expected res;
+    let%bind res = Orewa.bitpos conn ~start:2 key One in
+    let expected = Ok (Some 39) in
+    Alcotest.(check (result (option int) err)) "BITPOS failed" expected res;
+    let%bind res = Orewa.bitpos conn ~start:2 ~end':3 key One in
+    let expected = Ok None in
+    Alcotest.(check (result (option int) err)) "BITPOS failed" expected res;
+    return ()
+
 let test_decr () =
   Orewa.connect ~host @@ fun conn ->
     let key = random_key () in
@@ -500,6 +516,7 @@ let tests = Alcotest_async.[
   test_case "BGSAVE" `Slow test_bgsave;
   test_case "BITCOUNT" `Slow test_bitcount;
   test_case "BITOP" `Slow test_bitop;
+  test_case "BITPOS" `Slow test_bitpos;
   test_case "DECR" `Slow test_decr;
   test_case "DECRBY" `Slow test_decrby;
   test_case "INCR" `Slow test_incr;

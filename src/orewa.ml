@@ -122,6 +122,27 @@ let bitop t ~destkey ?(keys=[]) ~key op =
   | Resp.Integer n -> return n
   | _ -> Deferred.return @@ Error `Unexpected
 
+type bit =
+  | Zero
+  | One
+
+let string_of_bit = function
+  | Zero -> "0"
+  | One -> "1"
+
+let bitpos t ?start ?end' key bit =
+  let open Deferred.Result.Let_syntax in
+  let%bind range = match start, end' with
+    | Some s, Some e -> return [string_of_int s; string_of_int e]
+    | Some s, None -> return [string_of_int s]
+    | None, None -> return []
+    | None, Some _ -> raise (Invalid_argument "Can't specify end without start")
+  in
+  match%bind request t (["BITPOS"; key; (string_of_bit bit)] @ range) with
+  | Resp.Integer (-1) -> return None
+  | Resp.Integer n -> return @@ Some n
+  | _ -> Deferred.return @@ Error `Unexpected
+
 let decr t key =
   let open Deferred.Result.Let_syntax in
   match%bind request t ["DECR"; key] with
