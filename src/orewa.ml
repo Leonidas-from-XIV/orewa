@@ -57,6 +57,22 @@ let getrange t ~start ~end' key =
   | Resp.Bulk v -> return v
   | _ -> Deferred.return @@ Error `Unexpected
 
+let mget t keys =
+  let open Deferred.Result.Let_syntax in
+  match%bind request t ("MGET" :: keys) with
+  | Resp.Array xs ->
+      xs
+      |> List.fold_right ~init:(Ok []) ~f:(fun item acc ->
+        match acc with
+        | Error _ -> acc
+        | Ok acc -> (
+          match item with
+          | Resp.Null -> Ok (None :: acc)
+          | Resp.Bulk s -> Ok (Some s::acc)
+          | _ -> Error `Unexpected))
+      |> Deferred.return
+  | _ -> Deferred.return @@ Error `Unexpected
+
 let lpush t ~key value =
   let open Deferred.Result.Let_syntax in
   match%bind request t ["LPUSH"; key; value] with
