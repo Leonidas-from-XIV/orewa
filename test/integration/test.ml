@@ -260,6 +260,16 @@ let test_getbit () =
     Alcotest.(check (result bit err)) "BITPOS failed" expected res;
     return ()
 
+let test_setbit () =
+  Orewa.connect ~host @@ fun conn ->
+    let key = random_key () in
+    let offset = 10 in
+    let%bind res = Orewa.setbit conn key offset Orewa.One in
+    Alcotest.(check (result bit err)) "SETBIT failed" (Ok Orewa.Zero) res;
+    let%bind res = Orewa.setbit conn key offset Orewa.Zero in
+    Alcotest.(check (result bit err)) "SETBIT failed" (Ok Orewa.One) res;
+    return ()
+
 let test_decr () =
   Orewa.connect ~host @@ fun conn ->
     let key = random_key () in
@@ -589,6 +599,7 @@ let tests = Alcotest_async.[
   test_case "BITOP" `Slow test_bitop;
   test_case "BITPOS" `Slow test_bitpos;
   test_case "GETBIT" `Slow test_getbit;
+  test_case "SETBIT" `Slow test_setbit;
   test_case "DECR" `Slow test_decr;
   test_case "DECRBY" `Slow test_decrby;
   test_case "INCR" `Slow test_incr;

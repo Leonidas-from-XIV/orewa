@@ -195,6 +195,15 @@ let getbit t key offset =
   | Resp.Integer 1 -> return One
   | _ -> Deferred.return @@ Error `Unexpected
 
+let setbit t key offset value =
+  let open Deferred.Result.Let_syntax in
+  let offset = string_of_int offset in
+  let value = string_of_bit value in
+  match%bind request t ["SETBIT"; key; offset; value] with
+  | Resp.Integer 0 -> return Zero
+  | Resp.Integer 1 -> return One
+  | _ -> Deferred.return @@ Error `Unexpected
+
 let decr t key =
   let open Deferred.Result.Let_syntax in
   match%bind request t ["DECR"; key] with
