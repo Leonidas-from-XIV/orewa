@@ -254,10 +254,10 @@ let test_getbit () =
     let%bind _ = Orewa.set conn ~key value in
     let expected = Ok Orewa.Zero in
     let%bind res = Orewa.getbit conn key 0 in
-    Alcotest.(check (result bit err)) "BITPOS failed" expected res;
+    Alcotest.(check (result bit err)) "GETBIT failed" expected res;
     let expected = Ok Orewa.Zero in
     let%bind res = Orewa.getbit conn key 8 in
-    Alcotest.(check (result bit err)) "BITPOS failed" expected res;
+    Alcotest.(check (result bit err)) "GETBIT failed" expected res;
     return ()
 
 let test_setbit () =
