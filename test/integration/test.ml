@@ -17,6 +17,7 @@ let ie = Alcotest.(result int err)
 let se = Alcotest.(result string err)
 let soe = Alcotest.(result (option string) err)
 let some_string = Alcotest.testable String.pp (const (const true))
+let bit = Alcotest.testable Orewa.pp_bit Orewa.equal_bit
 
 let unordered_string_list = Alcotest.(testable (pp (list string)) (fun a b ->
   let equal = equal (list string) in
@@ -191,6 +192,19 @@ let test_bitpos () =
     let%bind res = Orewa.bitpos conn ~start:2 ~end':3 key One in
     let expected = Ok None in
     Alcotest.(check (result (option int) err)) "BITPOS failed" expected res;
+    return ()
+
+let test_getbit () =
+  Orewa.connect ~host @@ fun conn ->
+    let key = random_key () in
+    let value = "\001" in
+    let%bind _ = Orewa.set conn ~key value in
+    let expected = Ok Orewa.Zero in
+    let%bind res = Orewa.getbit conn key 0 in
+    Alcotest.(check (result bit err)) "BITPOS failed" expected res;
+    let expected = Ok Orewa.Zero in
+    let%bind res = Orewa.getbit conn key 8 in
+    Alcotest.(check (result bit err)) "BITPOS failed" expected res;
     return ()
 
 let test_decr () =
@@ -517,6 +531,7 @@ let tests = Alcotest_async.[
   test_case "BITCOUNT" `Slow test_bitcount;
   test_case "BITOP" `Slow test_bitop;
   test_case "BITPOS" `Slow test_bitpos;
+  test_case "GETBIT" `Slow test_getbit;
   test_case "DECR" `Slow test_decr;
   test_case "DECRBY" `Slow test_decrby;
   test_case "INCR" `Slow test_incr;

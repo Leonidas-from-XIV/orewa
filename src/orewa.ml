@@ -125,6 +125,7 @@ let bitop t ~destkey ?(keys=[]) ~key op =
 type bit =
   | Zero
   | One
+[@@deriving show, eq]
 
 let string_of_bit = function
   | Zero -> "0"
@@ -141,6 +142,14 @@ let bitpos t ?start ?end' key bit =
   match%bind request t (["BITPOS"; key; (string_of_bit bit)] @ range) with
   | Resp.Integer (-1) -> return None
   | Resp.Integer n -> return @@ Some n
+  | _ -> Deferred.return @@ Error `Unexpected
+
+let getbit t key offset =
+  let open Deferred.Result.Let_syntax in
+  let offset = string_of_int offset in
+  match%bind request t ["GETBIT"; key; offset] with
+  | Resp.Integer 0 -> return Zero
+  | Resp.Integer 1 -> return One
   | _ -> Deferred.return @@ Error `Unexpected
 
 let decr t key =
