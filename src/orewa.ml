@@ -51,6 +51,12 @@ let get t key =
   | Resp.Null -> return @@ None
   | _ -> Deferred.return @@ Error `Unexpected
 
+let getrange t ~start ~end' key =
+  let open Deferred.Result.Let_syntax in
+  match%bind request t ["GETRANGE"; key; string_of_int start; string_of_int end'] with
+  | Resp.Bulk v -> return v
+  | _ -> Deferred.return @@ Error `Unexpected
+
 let lpush t ~key value =
   let open Deferred.Result.Let_syntax in
   match%bind request t ["LPUSH"; key; value] with
