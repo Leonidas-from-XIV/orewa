@@ -18,7 +18,7 @@ let discard_prefix =
 type nested_resp =
   | Atomic of Resp.t
   | Array of (int * nested_resp Stack.t)
-  | String of (int * Rope.t)
+  | String of (int * string list)
 
 let rec show_nested_resp = function
   | Atomic _ -> "Element(..)"
@@ -61,7 +61,7 @@ let rec update_latest_bulk_read stack retrieved s =
     (match left_to_read with
     | 0 -> Log.Global.debug "Bulk read finished"
     | _ -> ());
-    let updated = String (left_to_read, Rope.(rope ^ (of_string s))) in
+    let updated = String (left_to_read, s :: rope) in
     Stack.push stack updated
   | _ -> ()
 
@@ -71,7 +71,7 @@ let rec unwind_stack stack =
   |> List.map ~f:(function
     | Atomic resp -> resp
     | String (_, rope) ->
-      let s = Rope.to_string rope in
+      let s = rope |> List.rev |> String.concat in
       Resp.Bulk (String.subo ~len:((String.length s) - 2) s)
     | Array (_, stack) ->
       Resp.Array (List.rev (unwind_stack stack)))
@@ -143,7 +143,7 @@ let rec handle_chunk stack iobuf =
           | false ->
             let content = Iobuf.Consume.stringo ~len:retrieved iobuf in
             let left_to_read = bulk_len - retrieved + 2 in
-            one_record_read stack (String (left_to_read, Rope.of_string content));
+            one_record_read stack (String (left_to_read, [content]));
             return @@ `Continue))
       | ':' ->
         (* Integer *)
