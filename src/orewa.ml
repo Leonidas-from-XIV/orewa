@@ -147,6 +147,59 @@ let bitcount t ?range key =
   | Resp.Integer n -> return n
   | _ -> Deferred.return @@ Error `Unexpected
 
+type overflow =
+  | Wrap
+  | Sat
+  | Fail
+
+let string_of_overflow = function
+  | Wrap -> "WRAP"
+  | Sat -> "SAT"
+  | Fail -> "FAIL"
+
+(* Declaration of type of the integer *)
+type intsize = string
+
+type offset =
+  | Absolute of int
+  | Relative of int
+
+let string_of_offset = function
+  | Absolute v -> string_of_int v
+  | Relative v -> Printf.sprintf "#%d" v
+
+type fieldop =
+  | Get of intsize * offset
+  | Set of intsize * offset * int
+  | Incrby of intsize * offset * int
+
+let bitfield t ?overflow key ops =
+  let open Deferred.Result.Let_syntax in
+  let ops = ops
+    |> List.map ~f:(function
+      | Get (size, offset) -> ["GET"; size; string_of_offset offset]
+      | Set (size, offset, value) -> ["SET"; size; string_of_offset offset; string_of_int value]
+      | Incrby (size, offset, increment) -> ["INCRBY"; size; string_of_offset offset; string_of_int increment])
+    |> List.concat
+  in
+  let overflow = match overflow with
+    | None -> []
+    | Some behaviour -> ["OVERFLOW"; string_of_overflow behaviour]
+  in
+  match%bind request t (["BITFIELD"; key] @ overflow @ ops) with
+  | Resp.Array xs ->
+      let open Result.Let_syntax in
+      xs
+      |> List.fold ~init:(Ok []) ~f:(fun acc v ->
+          match acc, v with
+          | Error _, _ -> acc
+          | Ok acc, Resp.Integer i -> Ok ((Some i) :: acc)
+          | Ok acc, Resp.Null -> Ok (None :: acc)
+          | Ok _, _ -> Error `Unexpected)
+      >>| List.rev
+      |> Deferred.return
+  | _ -> Deferred.return @@ Error `Unexpected
+
 type bitop =
   | AND
   | OR

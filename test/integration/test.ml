@@ -270,6 +270,27 @@ let test_setbit () =
     Alcotest.(check (result bit err)) "SETBIT failed" (Ok Orewa.One) res;
     return ()
 
+let test_bitfield () =
+  Orewa.with_connection ~host @@ fun conn ->
+    let key = random_key () in
+    let ile = Alcotest.(result (list (option int)) err) in
+    let intsize = "u8" in
+    let maxsize = 255 in
+    let%bind res = Orewa.bitfield conn key [Set (intsize, Absolute 0, 1)] in
+    Alcotest.(check ile) "Setting returns previous value" (Ok [Some 0]) res;
+    let%bind res = Orewa.bitfield conn key [Set (intsize, Absolute 0, 0)] in
+    Alcotest.(check ile) "Setting returns previous value" (Ok [Some 1]) res;
+    let%bind res = Orewa.bitfield conn key [Get (intsize, Absolute 0)] in
+    Alcotest.(check ile) "Getting returns current value" (Ok [Some 0]) res;
+    let overflow_by = 42 in
+    let%bind res = Orewa.bitfield conn key ~overflow:Orewa.Wrap [Set (intsize, Relative 0, maxsize); Incrby (intsize, Relative 0, Int.succ overflow_by)] in
+    Alcotest.(check ile) "Relative setting and overflow work" (Ok [Some 0; Some overflow_by]) res;
+    let%bind res = Orewa.bitfield conn key ~overflow:Orewa.Sat [Set (intsize, Relative 0, maxsize); Incrby (intsize, Relative 0, 1)] in
+    Alcotest.(check ile) "Saturated overflow works" (Ok [Some overflow_by; Some maxsize]) res;
+    let%bind res = Orewa.bitfield conn key ~overflow:Orewa.Fail [Incrby (intsize, Relative 0, 1)] in
+    Alcotest.(check ile) "Failing overflow works" (Ok [None]) res;
+    return ()
+
 let test_decr () =
   Orewa.with_connection ~host @@ fun conn ->
     let key = random_key () in
@@ -596,6 +617,7 @@ let tests = Alcotest_async.[
   test_case "BGREWRITEAOF" `Slow test_bgrewriteaof;
   test_case "BGSAVE" `Slow test_bgsave;
   test_case "BITCOUNT" `Slow test_bitcount;
+  test_case "BITFIELD" `Slow test_bitfield;
   test_case "BITOP" `Slow test_bitop;
   test_case "BITPOS" `Slow test_bitpos;
   test_case "GETBIT" `Slow test_getbit;
