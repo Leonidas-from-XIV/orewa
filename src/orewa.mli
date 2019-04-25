@@ -76,8 +76,6 @@ type overflow =
   | Sat
   | Fail
 
-val string_of_overflow : overflow -> string
-
 type intsize =
   | Signed of int
   | Unsigned of int
@@ -85,8 +83,6 @@ type intsize =
 type offset =
   | Absolute of int
   | Relative of int
-
-val string_of_offset : offset -> string
 
 type fieldop =
   | Get of intsize * offset
@@ -106,8 +102,6 @@ type bitop =
   | XOR
   | NOT
 
-val string_of_bitop : bitop -> string
-
 val bitop
   :  t ->
   destkey:string ->
@@ -119,14 +113,7 @@ val bitop
 type bit =
   | Zero
   | One
-
-val pp_bit : Format.formatter -> bit -> unit
-
-val show_bit : bit -> string
-
-val equal_bit : bit -> bit -> bool
-
-val string_of_bit : bit -> string
+[@@deriving show, eq]
 
 val bitpos
   :  t ->
