@@ -9,9 +9,9 @@ env:
   global:
     - PACKAGE=orewa
     - TESTS=true
-    - POST_INSTALL_HOOK="opam install ocamlformat>=0.9 && make format && opam install alcotest alcotest-async && make integration"
+    - POST_INSTALL_HOOK="opam install alcotest alcotest-async && make integration"
   matrix:
     - OCAML_VERSION=4.04
     - OCAML_VERSION=4.05
     - OCAML_VERSION=4.06
-    - OCAML_VERSION=4.07
+    - OCAML_VERSION=4.07 POST_INSTALL_HOOK="opam install ocamlformat>=0.9 && make format && opam install alcotest alcotest-async && make integration"
