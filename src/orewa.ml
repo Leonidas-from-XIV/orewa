@@ -288,6 +288,12 @@ let incrby t key increment =
   | Resp.Integer n -> return n
   | _ -> Deferred.return @@ Error `Unexpected
 
+let incrbyfloat t key increment =
+  let open Deferred.Result.Let_syntax in
+  match%bind request t ["INCRBYFLOAT"; key; (string_of_float increment)] with
+  | Resp.Bulk v -> return @@ float_of_string v
+  | _ -> Deferred.return @@ Error `Unexpected
+
 let select t index =
   let open Deferred.Result.Let_syntax in
   match%bind request t ["SELECT"; (string_of_int index)] with

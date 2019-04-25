@@ -340,6 +340,14 @@ let test_incrby () =
     Alcotest.(check (result int err)) "INCRBY failed" (Ok (value + increment)) res;
     return ()
 
+let test_incrbyfloat () =
+  Orewa.with_connection ~host @@ fun conn ->
+    let key = random_key () in
+    let increment = 42. in
+    let%bind res = Orewa.incrbyfloat conn key increment in
+    Alcotest.(check (result (float 0.1) err)) "INCRBYFLOAT failed" (Ok increment) res;
+    return ()
+
 let test_select () =
   Orewa.with_connection ~host @@ fun conn ->
     let index = 5 in
@@ -638,6 +646,7 @@ let tests = Alcotest_async.[
   test_case "DECRBY" `Slow test_decrby;
   test_case "INCR" `Slow test_incr;
   test_case "INCRBY" `Slow test_incrby;
+  test_case "INCRBYFLOAT" `Slow test_incrbyfloat;
   test_case "SELECT" `Slow test_select;
   test_case "DEL" `Slow test_del;
   test_case "EXISTS" `Slow test_exists;
