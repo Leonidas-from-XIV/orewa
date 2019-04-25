@@ -6,6 +6,11 @@ type t = {
   writer : Writer.t
 }
 
+type common_error =
+  [ `Connection_closed
+  | `Eof
+  | `Unexpected ]
+
 let construct_request commands =
   commands
   |> List.map ~f:(fun cmd -> Resp.Bulk cmd)
