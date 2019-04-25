@@ -64,6 +64,12 @@ let getset t ~key value =
   | Resp.Null -> return None
   | _ -> Deferred.return @@ Error `Unexpected
 
+let strlen t key =
+  let open Deferred.Result.Let_syntax in
+  match%bind request t ["STRLEN"; key] with
+  | Resp.Integer v -> return v
+  | _ -> Deferred.return @@ Error `Unexpected
+
 let mget t keys =
   let open Deferred.Result.Let_syntax in
   match%bind request t ("MGET" :: keys) with
