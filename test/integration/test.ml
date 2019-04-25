@@ -9,9 +9,7 @@ let exceeding_read_buffer = 128 * 1024
 
 module Orewa_error = struct
   type t =
-    [ `Connection_closed
-    | `Eof
-    | `Unexpected
+    [ Orewa.common_error
     | `Redis_error of string
     | `No_such_key of string
     | `Not_expiring of string ]
