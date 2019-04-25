@@ -14,4 +14,4 @@ env:
     - OCAML_VERSION=4.04
     - OCAML_VERSION=4.05
     - OCAML_VERSION=4.06
-    - OCAML_VERSION=4.07 POST_INSTALL_HOOK="opam install ocamlformat>=0.9 && make format && opam install alcotest alcotest-async && make integration"
+    - OCAML_VERSION=4.07 EXTRA_DEPS="ocamlformat>0.9" PRE_INSTALL_HOOK="make format"
