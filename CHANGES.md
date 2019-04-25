@@ -1,3 +1,4 @@
-* Initial draft
+* Initial release
 * Designed to be async thread-safe
-* Only few commands supported
+* Supports all string commands of Redis 5.0 and a few others
+* All implemented commands tested against an actual Redis server
