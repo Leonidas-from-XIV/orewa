@@ -17,3 +17,11 @@ depends: [
   "ppx_deriving" {>= "4.2"}
 ]
 synopsis: "Async-friendly Redis client"
+description: """Async-friendly Redis client
+
+Orewa is a Redis client designed with cooperative multithreading in mind, thus
+operations are non-blocking by default.
+
+It also features an OCaml-friendly Redis API wrapping the stringly constructs
+of the Redis commands into a more typed and less fragile interface that does
+its best to provide a pleasant interface."""
