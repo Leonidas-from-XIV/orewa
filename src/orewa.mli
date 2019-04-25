@@ -78,7 +78,9 @@ type overflow =
 
 val string_of_overflow : overflow -> string
 
-type intsize = string
+type intsize =
+  | Signed of int
+  | Unsigned of int
 
 type offset =
   | Absolute of int

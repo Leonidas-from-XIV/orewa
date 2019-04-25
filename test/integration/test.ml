@@ -334,7 +334,7 @@ let test_bitfield () =
   Orewa.with_connection ~host @@ fun conn ->
   let key = random_key () in
   let ile = Alcotest.(result (list (option int)) err) in
-  let intsize = "u8" in
+  let intsize = Orewa.Unsigned 8 in
   let maxsize = 255 in
   let%bind res = Orewa.bitfield conn key [Set (intsize, Absolute 0, 1)] in
   Alcotest.(check ile) "Setting returns previous value" (Ok [Some 0]) res;

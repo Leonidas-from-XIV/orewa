@@ -171,7 +171,13 @@ let string_of_overflow = function
   | Fail -> "FAIL"
 
 (* Declaration of type of the integer *)
-type intsize = string
+type intsize =
+  | Signed of int
+  | Unsigned of int
+
+let string_of_intsize = function
+  | Signed v -> Printf.sprintf "i%d" v
+  | Unsigned v -> Printf.sprintf "u%d" v
 
 type offset =
   | Absolute of int
@@ -191,11 +197,18 @@ let bitfield t ?overflow key ops =
   let ops =
     ops
     |> List.map ~f:(function
-           | Get (size, offset) -> ["GET"; size; string_of_offset offset]
+           | Get (size, offset) ->
+               ["GET"; string_of_intsize size; string_of_offset offset]
            | Set (size, offset, value) ->
-               ["SET"; size; string_of_offset offset; string_of_int value]
+               [ "SET";
+                 string_of_intsize size;
+                 string_of_offset offset;
+                 string_of_int value ]
            | Incrby (size, offset, increment) ->
-               ["INCRBY"; size; string_of_offset offset; string_of_int increment] )
+               [ "INCRBY";
+                 string_of_intsize size;
+                 string_of_offset offset;
+                 string_of_int increment ] )
     |> List.concat
   in
   let overflow =
