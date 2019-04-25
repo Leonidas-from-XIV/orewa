@@ -3,7 +3,7 @@ open Async
 
 type t = {
   reader : Reader.t;
-  writer : Writer.t;
+  writer : Writer.t
 }
 
 let construct_request commands =
@@ -12,13 +12,9 @@ let construct_request commands =
   |> (fun xs -> Resp.Array xs)
   |> Resp.encode
 
-let submit_request writer command =
-  construct_request command
-  |> Writer.write writer
+let submit_request writer command = construct_request command |> Writer.write writer
 
-let request { reader; writer } req =
-  submit_request writer req;
-  Parser.read_resp reader
+let request {reader; writer} req = submit_request writer req; Parser.read_resp reader
 
 let echo t message =
   let open Deferred.Result.Let_syntax in
@@ -26,20 +22,24 @@ let echo t message =
   | Resp.Bulk v -> return v
   | _ -> Deferred.return @@ Error `Unexpected
 
-type exist = Not_if_exists | Only_if_exists
+type exist =
+  | Not_if_exists
+  | Only_if_exists
 
 let set t ~key ?expire ?exist value =
   let open Deferred.Result.Let_syntax in
-  let expiry = match expire with
+  let expiry =
+    match expire with
     | None -> []
     | Some span -> ["PX"; span |> Time.Span.to_ms |> int_of_float |> string_of_int]
   in
-  let existence = match exist with
+  let existence =
+    match exist with
     | None -> []
     | Some Not_if_exists -> ["NX"]
     | Some Only_if_exists -> ["PX"]
   in
-  let command = ["SET"; key; value;] @ expiry @ existence in
+  let command = ["SET"; key; value] @ expiry @ existence in
   match%bind request t command with
   | Resp.String "OK" -> return ()
   | _ -> Deferred.return @@ Error `Unexpected
@@ -76,32 +76,26 @@ let mget t keys =
   | Resp.Array xs ->
       xs
       |> List.fold_right ~init:(Ok []) ~f:(fun item acc ->
-        match acc with
-        | Error _ -> acc
-        | Ok acc -> (
-          match item with
-          | Resp.Null -> Ok (None :: acc)
-          | Resp.Bulk s -> Ok (Some s::acc)
-          | _ -> Error `Unexpected))
+             match acc with
+             | Error _ -> acc
+             | Ok acc -> (
+               match item with
+               | Resp.Null -> Ok (None :: acc)
+               | Resp.Bulk s -> Ok (Some s :: acc)
+               | _ -> Error `Unexpected ) )
       |> Deferred.return
   | _ -> Deferred.return @@ Error `Unexpected
 
 let mset t alist =
   let open Deferred.Result.Let_syntax in
-  let payload = alist
-    |> List.map ~f:(fun (k, v) -> [k; v])
-    |> List.concat
-  in
+  let payload = alist |> List.map ~f:(fun (k, v) -> [k; v]) |> List.concat in
   match%bind request t ("MSET" :: payload) with
   | Resp.String "OK" -> return ()
   | _ -> Deferred.return @@ Error `Unexpected
 
 let msetnx t alist =
   let open Deferred.Result.Let_syntax in
-  let payload = alist
-    |> List.map ~f:(fun (k, v) -> [k; v])
-    |> List.concat
-  in
+  let payload = alist |> List.map ~f:(fun (k, v) -> [k; v]) |> List.concat in
   match%bind request t ("MSETNX" :: payload) with
   | Resp.Integer 1 -> return true
   | Resp.Integer 0 -> return false
@@ -117,11 +111,11 @@ let lrange t ~key ~start ~stop =
   let open Deferred.Result.Let_syntax in
   match%bind request t ["LRANGE"; key; string_of_int start; string_of_int stop] with
   | Resp.Array xs ->
-    List.map xs ~f:(function
-      | Resp.Bulk v -> Ok v
-      | _ -> Error `Unexpected)
-    |> Result.all
-    |> Deferred.return
+      List.map xs ~f:(function
+          | Resp.Bulk v -> Ok v
+          | _ -> Error `Unexpected )
+      |> Result.all
+      |> Deferred.return
   | _ -> Deferred.return @@ Error `Unexpected
 
 let append t ~key value =
@@ -152,9 +146,10 @@ let bgsave t =
 
 let bitcount t ?range key =
   let open Deferred.Result.Let_syntax in
-  let range = match range with
+  let range =
+    match range with
     | None -> []
-    | Some (start, end_) -> [(string_of_int start); (string_of_int end_)]
+    | Some (start, end_) -> [string_of_int start; string_of_int end_]
   in
   match%bind request t (["BITCOUNT"; key] @ range) with
   | Resp.Integer n -> return n
@@ -188,14 +183,18 @@ type fieldop =
 
 let bitfield t ?overflow key ops =
   let open Deferred.Result.Let_syntax in
-  let ops = ops
+  let ops =
+    ops
     |> List.map ~f:(function
-      | Get (size, offset) -> ["GET"; size; string_of_offset offset]
-      | Set (size, offset, value) -> ["SET"; size; string_of_offset offset; string_of_int value]
-      | Incrby (size, offset, increment) -> ["INCRBY"; size; string_of_offset offset; string_of_int increment])
+           | Get (size, offset) -> ["GET"; size; string_of_offset offset]
+           | Set (size, offset, value) ->
+               ["SET"; size; string_of_offset offset; string_of_int value]
+           | Incrby (size, offset, increment) ->
+               ["INCRBY"; size; string_of_offset offset; string_of_int increment] )
     |> List.concat
   in
-  let overflow = match overflow with
+  let overflow =
+    match overflow with
     | None -> []
     | Some behaviour -> ["OVERFLOW"; string_of_overflow behaviour]
   in
@@ -204,11 +203,11 @@ let bitfield t ?overflow key ops =
       let open Result.Let_syntax in
       xs
       |> List.fold ~init:(Ok []) ~f:(fun acc v ->
-          match acc, v with
-          | Error _, _ -> acc
-          | Ok acc, Resp.Integer i -> Ok ((Some i) :: acc)
-          | Ok acc, Resp.Null -> Ok (None :: acc)
-          | Ok _, _ -> Error `Unexpected)
+             match acc, v with
+             | Error _, _ -> acc
+             | Ok acc, Resp.Integer i -> Ok (Some i :: acc)
+             | Ok acc, Resp.Null -> Ok (None :: acc)
+             | Ok _, _ -> Error `Unexpected )
       >>| List.rev
       |> Deferred.return
   | _ -> Deferred.return @@ Error `Unexpected
@@ -225,9 +224,9 @@ let string_of_bitop = function
   | XOR -> "XOR"
   | NOT -> "NOT"
 
-let bitop t ~destkey ?(keys=[]) ~key op =
+let bitop t ~destkey ?(keys = []) ~key op =
   let open Deferred.Result.Let_syntax in
-  match%bind request t (["BITOP"; (string_of_bitop op); destkey; key] @ keys) with
+  match%bind request t (["BITOP"; string_of_bitop op; destkey; key] @ keys) with
   | Resp.Integer n -> return n
   | _ -> Deferred.return @@ Error `Unexpected
 
@@ -242,14 +241,15 @@ let string_of_bit = function
 
 let bitpos t ?start ?end' key bit =
   let open Deferred.Result.Let_syntax in
-  let%bind range = match start, end' with
+  let%bind range =
+    match start, end' with
     | Some s, Some e -> return [string_of_int s; string_of_int e]
     | Some s, None -> return [string_of_int s]
     | None, None -> return []
     | None, Some _ -> raise (Invalid_argument "Can't specify end without start")
   in
-  match%bind request t (["BITPOS"; key; (string_of_bit bit)] @ range) with
-  | Resp.Integer (-1) -> return None
+  match%bind request t (["BITPOS"; key; string_of_bit bit] @ range) with
+  | Resp.Integer -1 -> return None
   | Resp.Integer n -> return @@ Some n
   | _ -> Deferred.return @@ Error `Unexpected
 
@@ -278,7 +278,7 @@ let decr t key =
 
 let decrby t key decrement =
   let open Deferred.Result.Let_syntax in
-  match%bind request t ["DECRBY"; key; (string_of_int decrement)] with
+  match%bind request t ["DECRBY"; key; string_of_int decrement] with
   | Resp.Integer n -> return n
   | _ -> Deferred.return @@ Error `Unexpected
 
@@ -290,29 +290,29 @@ let incr t key =
 
 let incrby t key increment =
   let open Deferred.Result.Let_syntax in
-  match%bind request t ["INCRBY"; key; (string_of_int increment)] with
+  match%bind request t ["INCRBY"; key; string_of_int increment] with
   | Resp.Integer n -> return n
   | _ -> Deferred.return @@ Error `Unexpected
 
 let incrbyfloat t key increment =
   let open Deferred.Result.Let_syntax in
-  match%bind request t ["INCRBYFLOAT"; key; (string_of_float increment)] with
+  match%bind request t ["INCRBYFLOAT"; key; string_of_float increment] with
   | Resp.Bulk v -> return @@ float_of_string v
   | _ -> Deferred.return @@ Error `Unexpected
 
 let select t index =
   let open Deferred.Result.Let_syntax in
-  match%bind request t ["SELECT"; (string_of_int index)] with
+  match%bind request t ["SELECT"; string_of_int index] with
   | Resp.String "OK" -> return ()
   | _ -> Deferred.return @@ Error `Unexpected
 
-let del t ?(keys=[]) key =
+let del t ?(keys = []) key =
   let open Deferred.Result.Let_syntax in
   match%bind request t (["DEL"; key] @ keys) with
   | Resp.Integer n -> return n
   | _ -> Deferred.return @@ Error `Unexpected
 
-let exists t ?(keys=[]) key =
+let exists t ?(keys = []) key =
   let open Deferred.Result.Let_syntax in
   match%bind request t (["EXISTS"; key] @ keys) with
   | Resp.Integer n -> return n
@@ -339,41 +339,44 @@ let keys t pattern =
   let open Deferred.Result.Let_syntax in
   match%bind request t ["KEYS"; pattern] with
   | Resp.Array xs ->
-    List.map xs ~f:(function
-      | Resp.Bulk key -> Ok key
-      | _ -> Error `Unexpected)
-    |> Result.all
-    |> Deferred.return
+      List.map xs ~f:(function
+          | Resp.Bulk key -> Ok key
+          | _ -> Error `Unexpected )
+      |> Result.all
+      |> Deferred.return
   | _ -> Deferred.return @@ Error `Unexpected
 
 let scan ?pattern ?count t =
-  let pattern = match pattern with
+  let pattern =
+    match pattern with
     | Some pattern -> ["MATCH"; pattern]
     | None -> []
   in
-  let count = match count with
+  let count =
+    match count with
     | Some count -> ["COUNT"; string_of_int count]
     | None -> []
   in
   Pipe.create_reader ~close_on_exception:false @@ fun writer ->
-    Deferred.repeat_until_finished "0" @@ fun cursor ->
-      match%bind request t (["SCAN"; cursor] @ pattern @ count) with
-      | Ok Resp.Array [Resp.Bulk cursor; Resp.Array from] ->
-        let from = from
-          |> List.map ~f:(function
-            | Resp.Bulk s -> s
-            | _ -> failwith "unexpected")
-          |> Queue.of_list
-        in
-        let%bind () = Pipe.transfer_in writer ~from in
-        (match cursor with
-          | "0" -> return @@ `Finished ()
-          | cursor -> return @@ `Repeat cursor)
-      | _ -> failwith "unexpected"
+  Deferred.repeat_until_finished "0" @@ fun cursor ->
+  match%bind request t (["SCAN"; cursor] @ pattern @ count) with
+  | Ok (Resp.Array [Resp.Bulk cursor; Resp.Array from]) -> (
+      let from =
+        from
+        |> List.map ~f:(function
+               | Resp.Bulk s -> s
+               | _ -> failwith "unexpected" )
+        |> Queue.of_list
+      in
+      let%bind () = Pipe.transfer_in writer ~from in
+      match cursor with
+      | "0" -> return @@ `Finished ()
+      | cursor -> return @@ `Repeat cursor )
+  | _ -> failwith "unexpected"
 
 let move t key db =
   let open Deferred.Result.Let_syntax in
-  match%bind request t ["MOVE"; key; (string_of_int db)] with
+  match%bind request t ["MOVE"; key; string_of_int db] with
   | Resp.Integer 0 -> return false
   | Resp.Integer 1 -> return true
   | _ -> Deferred.return @@ Error `Unexpected
@@ -404,36 +407,42 @@ let renamenx t ~key newkey =
   | Resp.Integer 1 -> return true
   | _ -> Deferred.return @@ Error `Unexpected
 
-type order = Asc | Desc
+type order =
+  | Asc
+  | Desc
 
 let sort t ?by ?limit ?get ?order ?alpha ?store key =
   let open Deferred.Result.Let_syntax in
-  let by = match by with
+  let by =
+    match by with
     | None -> []
     | Some by -> ["BY"; by]
   in
-  let limit = match limit with
+  let limit =
+    match limit with
     | None -> []
-    | Some (offset, count) -> ["LIMIT"; (string_of_int offset); (string_of_int count)]
+    | Some (offset, count) -> ["LIMIT"; string_of_int offset; string_of_int count]
   in
-  let get = match get with
+  let get =
+    match get with
     | None -> []
     | Some patterns ->
-      patterns
-      |> List.map ~f:(fun pattern -> ["GET"; pattern])
-      |> List.concat
+        patterns |> List.map ~f:(fun pattern -> ["GET"; pattern]) |> List.concat
   in
-  let order = match order with
+  let order =
+    match order with
     | None -> []
     | Some Asc -> ["ASC"]
     | Some Desc -> ["DESC"]
   in
-  let alpha = match alpha with
+  let alpha =
+    match alpha with
     | None -> []
     | Some false -> []
     | Some true -> ["ALPHA"]
   in
-  let store = match store with
+  let store =
+    match store with
     | None -> []
     | Some destination -> ["STORE"; destination]
   in
@@ -441,20 +450,20 @@ let sort t ?by ?limit ?get ?order ?alpha ?store key =
   match%bind request t q with
   | Resp.Integer count -> return @@ `Count count
   | Resp.Array sorted ->
-    sorted
-    |>List.map ~f:(function
-      | Resp.Bulk v -> Ok v
-      | _ -> Error `Unexpected)
-    |> Result.all
-    |> Result.map ~f:(fun x -> `Sorted x)
-    |> Deferred.return
+      sorted
+      |> List.map ~f:(function
+             | Resp.Bulk v -> Ok v
+             | _ -> Error `Unexpected )
+      |> Result.all
+      |> Result.map ~f:(fun x -> `Sorted x)
+      |> Deferred.return
   | _ -> Deferred.return @@ Error `Unexpected
 
 let ttl t key =
   let open Deferred.Result.Let_syntax in
   match%bind request t ["PTTL"; key] with
-  | Resp.Integer (-2) -> Deferred.return @@ Error (`No_such_key key)
-  | Resp.Integer (-1) -> Deferred.return @@ Error (`Not_expiring key)
+  | Resp.Integer -2 -> Deferred.return @@ Error (`No_such_key key)
+  | Resp.Integer -1 -> Deferred.return @@ Error (`Not_expiring key)
   | Resp.Integer ms -> ms |> float_of_int |> Time.Span.of_ms |> return
   | _ -> Deferred.return @@ Error `Unexpected
 
@@ -474,36 +483,37 @@ let dump t key =
 
 let restore t ~key ?ttl ?replace value =
   let open Deferred.Result.Let_syntax in
-  let ttl = match ttl with
+  let ttl =
+    match ttl with
     | None -> "0"
-    | Some span ->
-      span
-      |> Time.Span.to_ms
-      |> Printf.sprintf ".0%f"
+    | Some span -> span |> Time.Span.to_ms |> Printf.sprintf ".0%f"
   in
-  let replace = match replace with
+  let replace =
+    match replace with
     | Some true -> ["REPLACE"]
-    | Some false
-    | None -> []
+    | Some false | None -> []
   in
   match%bind request t (["RESTORE"; key; ttl; value] @ replace) with
   | Resp.String "OK" -> return ()
   | _ -> Deferred.return @@ Error `Unexpected
 
-let init reader writer =
-  { reader; writer }
+let init reader writer = {reader; writer}
 
-let connect ?(port=6379) ~host =
-  let where = Tcp.Where_to_connect.of_host_and_port @@ Host_and_port.create ~host ~port in
-  let%bind (_socket, reader, writer) = Tcp.connect where in
+let connect ?(port = 6379) ~host =
+  let where =
+    Tcp.Where_to_connect.of_host_and_port @@ Host_and_port.create ~host ~port
+  in
+  let%bind _socket, reader, writer = Tcp.connect where in
   return @@ init reader writer
 
-let close { reader; writer } =
+let close {reader; writer} =
   let%bind () = Writer.close writer in
   Reader.close reader
 
-let with_connection ?(port=6379) ~host f =
-  let where = Tcp.Where_to_connect.of_host_and_port @@ Host_and_port.create ~host ~port in
+let with_connection ?(port = 6379) ~host f =
+  let where =
+    Tcp.Where_to_connect.of_host_and_port @@ Host_and_port.create ~host ~port
+  in
   Tcp.with_connection where @@ fun _socket reader writer ->
-    let t = init reader writer in
-    f t
+  let t = init reader writer in
+  f t
