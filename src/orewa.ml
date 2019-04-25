@@ -57,6 +57,13 @@ let getrange t ~start ~end' key =
   | Resp.Bulk v -> return v
   | _ -> Deferred.return @@ Error `Unexpected
 
+let getset t ~key value =
+  let open Deferred.Result.Let_syntax in
+  match%bind request t ["GETSET"; key; value] with
+  | Resp.Bulk v -> return (Some v)
+  | Resp.Null -> return None
+  | _ -> Deferred.return @@ Error `Unexpected
+
 let mget t keys =
   let open Deferred.Result.Let_syntax in
   match%bind request t ("MGET" :: keys) with

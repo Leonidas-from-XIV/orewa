@@ -67,6 +67,17 @@ let test_get () =
     Alcotest.(check soe) "Correct response" (Ok (Some value)) res;
     return ()
 
+let test_getset () =
+  Orewa.with_connection ~host @@ fun conn ->
+    let key = random_key () in
+    let value = random_key () in
+    let value' = random_key () in
+    let%bind res = Orewa.getset conn ~key value in
+    Alcotest.(check soe) "Setting non-existing key returns no previous value" (Ok None) res;
+    let%bind res = Orewa.getset conn ~key value' in
+    Alcotest.(check soe) "Setting existing key returns previous value" (Ok (Some value)) res;
+    return ()
+
 let test_mget () =
   Orewa.with_connection ~host @@ fun conn ->
     let key = random_key () in
@@ -621,6 +632,7 @@ let tests = Alcotest_async.[
   test_case "BITOP" `Slow test_bitop;
   test_case "BITPOS" `Slow test_bitpos;
   test_case "GETBIT" `Slow test_getbit;
+  test_case "GETSET" `Slow test_getset;
   test_case "SETBIT" `Slow test_setbit;
   test_case "DECR" `Slow test_decr;
   test_case "DECRBY" `Slow test_decrby;
