@@ -45,21 +45,21 @@ let random_key () =
   Printf.sprintf "redis-integration-%s" random_string
 
 let test_echo () =
-  Orewa.connect ~host @@ fun conn ->
+  Orewa.with_connection ~host @@ fun conn ->
     let message = "Hello" in
     let%bind response = Orewa.echo conn message in
     Alcotest.(check se) "ECHO faulty" (Ok message) response;
     return ()
 
 let test_set () =
-  Orewa.connect ~host @@ fun conn ->
+  Orewa.with_connection ~host @@ fun conn ->
     let key = random_key () in
     let%bind res = Orewa.set conn ~key "value" in
     Alcotest.(check ue) "SET failed" (Ok ()) res;
     return ()
 
 let test_get () =
-  Orewa.connect ~host @@ fun conn ->
+  Orewa.with_connection ~host @@ fun conn ->
     let key = random_key () in
     let value = random_key () in
     let%bind _ = Orewa.set conn ~key value in
@@ -68,7 +68,7 @@ let test_get () =
     return ()
 
 let test_mget () =
-  Orewa.connect ~host @@ fun conn ->
+  Orewa.with_connection ~host @@ fun conn ->
     let key = random_key () in
     let non_existing_key = random_key () in
     let value = random_key () in
@@ -78,7 +78,7 @@ let test_mget () =
     return ()
 
 let test_msetnx () =
-  Orewa.connect ~host @@ fun conn ->
+  Orewa.with_connection ~host @@ fun conn ->
     let key = random_key () in
     let value = random_key () in
     let key' = random_key () in
@@ -97,7 +97,7 @@ let test_msetnx () =
     return ()
 
 let test_mset () =
-  Orewa.connect ~host @@ fun conn ->
+  Orewa.with_connection ~host @@ fun conn ->
     let key = random_key () in
     let value = random_key () in
     let key' = random_key () in
@@ -109,7 +109,7 @@ let test_mset () =
     return ()
 
 let test_getrange () =
-  Orewa.connect ~host @@ fun conn ->
+  Orewa.with_connection ~host @@ fun conn ->
     let key = random_key () in
     let not_existing_key = random_key () in
     let value = "Hello" in
@@ -121,7 +121,7 @@ let test_getrange () =
     return ()
 
 let test_set_expiry () =
-  Orewa.connect ~host @@ fun conn ->
+  Orewa.with_connection ~host @@ fun conn ->
     let key = random_key () in
     let value = random_key () in
     let expire = Time.Span.of_ms 200. in
@@ -136,7 +136,7 @@ let test_set_expiry () =
 
 
 let test_large_set_get () =
-  Orewa.connect ~host @@ fun conn ->
+  Orewa.with_connection ~host @@ fun conn ->
     let key = random_key () in
     let value = String.init exceeding_read_buffer ~f:(fun _ -> 'a') in
     let%bind res = Orewa.set conn ~key value in
@@ -146,7 +146,7 @@ let test_large_set_get () =
     return ()
 
 let test_lpush () =
-  Orewa.connect ~host @@ fun conn ->
+  Orewa.with_connection ~host @@ fun conn ->
     let key = random_key () in
     let value = "value" in
     let%bind res = Orewa.lpush conn ~key value in
@@ -154,7 +154,7 @@ let test_lpush () =
     return ()
 
 let test_lpush_lrange () =
-  Orewa.connect ~host @@ fun conn ->
+  Orewa.with_connection ~host @@ fun conn ->
     let key = random_key () in
     let value = random_key () in
     let value' = random_key () in
@@ -165,7 +165,7 @@ let test_lpush_lrange () =
     return ()
 
 let test_large_lrange () =
-  Orewa.connect ~host @@ fun conn ->
+  Orewa.with_connection ~host @@ fun conn ->
     let key = random_key () in
     let value = String.init exceeding_read_buffer ~f:(fun _ -> 'a') in
     let values = 5 in
@@ -178,7 +178,7 @@ let test_large_lrange () =
     return ()
 
 let test_append () =
-  Orewa.connect ~host @@ fun conn ->
+  Orewa.with_connection ~host @@ fun conn ->
     let key = random_key () in
     let value = random_key () in
     let%bind res = Orewa.append conn ~key value in
@@ -186,7 +186,7 @@ let test_append () =
     return ()
 
 let test_auth () =
-  Orewa.connect ~host @@ fun conn ->
+  Orewa.with_connection ~host @@ fun conn ->
     let password = random_key () in
     let%bind res = Orewa.auth conn password in
     let expected = Error (`Redis_error "ERR Client sent AUTH, but no password is set") in
@@ -194,7 +194,7 @@ let test_auth () =
     return ()
 
 let test_bgrewriteaof () =
-  Orewa.connect ~host @@ fun conn ->
+  Orewa.with_connection ~host @@ fun conn ->
     let%bind res = Orewa.bgrewriteaof conn in
     let expected = Ok "blurb" in
     Alcotest.(check (result some_string err)) "BGREWRITEAOF failed" expected res;
@@ -202,14 +202,14 @@ let test_bgrewriteaof () =
     return ()
 
 let test_bgsave () =
-  Orewa.connect ~host @@ fun conn ->
+  Orewa.with_connection ~host @@ fun conn ->
     let%bind res = Orewa.bgsave conn in
     let expected = Ok "blurb" in
     Alcotest.(check (result some_string err)) "BGSAVE failed" expected res;
     return ()
 
 let test_bitcount () =
-  Orewa.connect ~host @@ fun conn ->
+  Orewa.with_connection ~host @@ fun conn ->
     let key = random_key () in
     let%bind _ = Orewa.set conn ~key "aaaa" in
     let%bind res = Orewa.bitcount conn key in
@@ -219,7 +219,7 @@ let test_bitcount () =
     return ()
 
 let test_bitop () =
-  Orewa.connect ~host @@ fun conn ->
+  Orewa.with_connection ~host @@ fun conn ->
     let key = random_key () in
     let destkey = random_key () in
     let value = "aaaa" in
@@ -232,7 +232,7 @@ let test_bitop () =
     return ()
 
 let test_bitpos () =
-  Orewa.connect ~host @@ fun conn ->
+  Orewa.with_connection ~host @@ fun conn ->
     let key = random_key () in
     let value = "\000\001\000\000\001" in
     let expected = Ok (Some 15) in
@@ -248,7 +248,7 @@ let test_bitpos () =
     return ()
 
 let test_getbit () =
-  Orewa.connect ~host @@ fun conn ->
+  Orewa.with_connection ~host @@ fun conn ->
     let key = random_key () in
     let value = "\001" in
     let%bind _ = Orewa.set conn ~key value in
@@ -261,7 +261,7 @@ let test_getbit () =
     return ()
 
 let test_setbit () =
-  Orewa.connect ~host @@ fun conn ->
+  Orewa.with_connection ~host @@ fun conn ->
     let key = random_key () in
     let offset = 10 in
     let%bind res = Orewa.setbit conn key offset Orewa.One in
@@ -271,7 +271,7 @@ let test_setbit () =
     return ()
 
 let test_decr () =
-  Orewa.connect ~host @@ fun conn ->
+  Orewa.with_connection ~host @@ fun conn ->
     let key = random_key () in
     let value = 42 in
     let%bind _ = Orewa.set conn ~key (string_of_int value) in
@@ -280,7 +280,7 @@ let test_decr () =
     return ()
 
 let test_decrby () =
-  Orewa.connect ~host @@ fun conn ->
+  Orewa.with_connection ~host @@ fun conn ->
     let key = random_key () in
     let value = 42 in
     let decrement = 23 in
@@ -290,7 +290,7 @@ let test_decrby () =
     return ()
 
 let test_incr () =
-  Orewa.connect ~host @@ fun conn ->
+  Orewa.with_connection ~host @@ fun conn ->
     let key = random_key () in
     let value = 42 in
     let%bind _ = Orewa.set conn ~key (string_of_int value) in
@@ -299,7 +299,7 @@ let test_incr () =
     return ()
 
 let test_incrby () =
-  Orewa.connect ~host @@ fun conn ->
+  Orewa.with_connection ~host @@ fun conn ->
     let key = random_key () in
     let value = 42 in
     let increment = 23 in
@@ -309,14 +309,14 @@ let test_incrby () =
     return ()
 
 let test_select () =
-  Orewa.connect ~host @@ fun conn ->
+  Orewa.with_connection ~host @@ fun conn ->
     let index = 5 in
     let%bind res = Orewa.select conn index in
     Alcotest.(check (result unit err)) "SELECT failed" (Ok ()) res;
     return ()
 
 let test_del () =
-  Orewa.connect ~host @@ fun conn ->
+  Orewa.with_connection ~host @@ fun conn ->
     let key = random_key () in
     let key' = random_key () in
     let value = "aaaa" in
@@ -327,7 +327,7 @@ let test_del () =
     return ()
 
 let test_exists () =
-  Orewa.connect ~host @@ fun conn ->
+  Orewa.with_connection ~host @@ fun conn ->
     let existing = random_key () in
     let missing = random_key () in
     let value = "aaaa" in
@@ -337,7 +337,7 @@ let test_exists () =
     return ()
 
 let test_expire () =
-  Orewa.connect ~host @@ fun conn ->
+  Orewa.with_connection ~host @@ fun conn ->
     let key = random_key () in
     let value = "aaaa" in
     let expire = Time.Span.of_ms 200. in
@@ -352,7 +352,7 @@ let test_expire () =
     return ()
 
 let test_expireat () =
-  Orewa.connect ~host @@ fun conn ->
+  Orewa.with_connection ~host @@ fun conn ->
     let key = random_key () in
     let value = "aaaa" in
     let expire = Time.Span.of_ms 200. in
@@ -368,7 +368,7 @@ let test_expireat () =
     return ()
 
 let test_keys () =
-  Orewa.connect ~host @@ fun conn ->
+  Orewa.with_connection ~host @@ fun conn ->
     let prefix = random_key () in
     let key1 = prefix ^ (random_key ()) in
     let key2 = prefix ^ (random_key ()) in
@@ -383,7 +383,7 @@ let test_keys () =
     return ()
 
 let test_scan () =
-  Orewa.connect ~host @@ fun conn ->
+  Orewa.with_connection ~host @@ fun conn ->
     let prefix = random_key () in
     let value = "aaaa" in
     let count = 20 in
@@ -402,7 +402,7 @@ let test_scan () =
     return ()
 
 let test_move () =
-  Orewa.connect ~host @@ fun conn ->
+  Orewa.with_connection ~host @@ fun conn ->
     let key = random_key () in
     let value = "aaaa" in
     let other_db = 4 in
@@ -420,7 +420,7 @@ let test_move () =
     return ()
 
 let test_persist () =
-  Orewa.connect ~host @@ fun conn ->
+  Orewa.with_connection ~host @@ fun conn ->
     let key = random_key () in
     let missing_key = random_key () in
     let value = "aaaa" in
@@ -434,7 +434,7 @@ let test_persist () =
     return ()
 
 let test_randomkey () =
-  Orewa.connect ~host @@ fun conn ->
+  Orewa.with_connection ~host @@ fun conn ->
     let key = random_key () in
     let value = "aaaa" in
     let%bind _ = Orewa.set conn ~key value in
@@ -443,7 +443,7 @@ let test_randomkey () =
     return ()
 
 let test_rename () =
-  Orewa.connect ~host @@ fun conn ->
+  Orewa.with_connection ~host @@ fun conn ->
     let key = random_key () in
     let new_key = random_key () in
     let value = "aaaa" in
@@ -457,7 +457,7 @@ let test_rename () =
     return ()
 
 let test_renamenx () =
-  Orewa.connect ~host @@ fun conn ->
+  Orewa.with_connection ~host @@ fun conn ->
     let key = random_key () in
     let new_key = random_key () in
     let value = "aaaa" in
@@ -470,7 +470,7 @@ let test_renamenx () =
     return ()
 
 let test_sort () =
-  Orewa.connect ~host @@ fun conn ->
+  Orewa.with_connection ~host @@ fun conn ->
     let key = random_key () in
     let randomly_ordered = List.range 0 10 |> List.map ~f:(fun _ ->
       Random.State.int random_state 1000)
@@ -510,7 +510,7 @@ let test_sort () =
     return ()
 
 let test_ttl () =
-  Orewa.connect ~host @@ fun conn ->
+  Orewa.with_connection ~host @@ fun conn ->
     let key = random_key () in
     let missing_key = random_key () in
     let persistent_key = random_key () in
@@ -530,7 +530,7 @@ let test_ttl () =
     return ()
 
 let test_type' () =
-  Orewa.connect ~host @@ fun conn ->
+  Orewa.with_connection ~host @@ fun conn ->
     let string_key = random_key () in
     let list_key = random_key () in
     let missing_key = random_key () in
@@ -545,7 +545,7 @@ let test_type' () =
     return ()
 
 let test_dump () =
-  Orewa.connect ~host @@ fun conn ->
+  Orewa.with_connection ~host @@ fun conn ->
     let key = random_key () in
     let missing_key = random_key () in
     let%bind _ = Orewa.set conn ~key "aaaa" in
@@ -557,7 +557,7 @@ let test_dump () =
     return ()
 
 let test_restore () =
-  Orewa.connect ~host @@ fun conn ->
+  Orewa.with_connection ~host @@ fun conn ->
     let key = random_key () in
     let list_key = random_key () in
     let new_key = random_key () in
