@@ -71,15 +71,17 @@ let close { waiters = _; writer } =
   Pipe.close writer;
   Pipe.closed writer
 
-let request t command : (Resp.t, [> common_error ]) Deferred.Result.t =
+let request t command =
   let waiter = Ivar.create () in
   let%bind () = Pipe.write t.writer { command; waiter } in
-  (* Type coersion *)
-  Ivar.read waiter >>= function
-  | Ok r -> Deferred.Result.return r
-  | Error `Connection_closed -> Deferred.Result.fail `Connection_closed
-  | Error `Eof -> Deferred.Result.fail `Eof
-  | Error `Unexpected -> Deferred.Result.fail `Unexpected
+  Ivar.read waiter
+  (* Type coercion*)
+  |> Deferred.Result.map_error
+    ~f:(function
+        | `Connection_closed -> `Connection_closed
+        | `Eof -> `Eof
+        | `Unexpected -> `Unexpected
+      )
 
 let echo t message : (string, [> common_error]) Deferred.Result.t =
   let open Deferred.Result.Let_syntax in
@@ -575,3 +577,11 @@ let restore t ~key ?ttl ?replace value =
   match%bind request t (["RESTORE"; key; ttl; value] @ replace) with
   | Resp.String "OK" -> return ()
   | _ -> Deferred.return @@ Error `Unexpected
+
+let with_connection ?(port = 6379) ~host f =
+  let where =
+    Tcp.Where_to_connect.of_host_and_port @@ Host_and_port.create ~host ~port
+  in
+  Tcp.with_connection where @@ fun _socket reader writer ->
+  let t = init reader writer in
+  f t
