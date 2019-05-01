@@ -203,5 +203,3 @@ val restore
 val connect : ?port:int -> host:string -> t Deferred.t
 
 val close : t -> unit Deferred.t
-
-val with_connection : ?port:int -> host:string -> (t -> 'a Deferred.t) -> 'a Deferred.t

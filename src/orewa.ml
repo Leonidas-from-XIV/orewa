@@ -1,16 +1,12 @@
 open Core
 open Async
 
-type t = {
-  reader : Reader.t;
-  writer : Writer.t
-}
-
-type common_error =
-  [ `Connection_closed
-  | `Eof
-  | `Unexpected ]
+type common_error = [ `Connection_closed | `Eof | `Unexpected ]
 [@@deriving show, eq]
+
+type response = (Resp.t, common_error) result
+type command = string list
+type request = { command: command; waiter: response Ivar.t }
 
 let construct_request commands =
   commands
@@ -18,11 +14,74 @@ let construct_request commands =
   |> (fun xs -> Resp.Array xs)
   |> Resp.encode
 
-let submit_request writer command = construct_request command |> Writer.write writer
+type t = {
+  (* Need a queue of waiter Ivars. Need some way of closing the connection *)
+  waiters: response Ivar.t Queue.t;
+  writer : request Pipe.Writer.t;
+}
 
-let request {reader; writer} req = submit_request writer req; Parser.read_resp reader
+let init reader writer =
+  (* Reader and writer are byte streams *)
+  let waiters = Queue.create () in
+  let rec recv_loop reader =
+    Parser.read_resp reader >>= function
+    | (Error _) as error ->
+      (* Signal this to all waiters.*)
+      Queue.iter waiters ~f:(fun waiter -> Ivar.fill waiter error);
+      Queue.clear waiters;
+      return ()
+    | Ok _ as result -> begin
+        match Queue.dequeue waiters with
+        | None -> failwith "No one is waiting for this reply. Was the connection closed, and we still get messages?"
+        | Some waiter ->
+          Ivar.fill waiter result;
+          recv_loop reader
+      end
+  in
+  don't_wait_for (recv_loop reader);
 
-let echo t message =
+  (* Create a writer. Its a pipe onto which requests are sent, as we
+     need to serialize in an orderly fashion. We don't want to have
+     multiple threads writing to the socket concurrently - even if we
+     could create the complete messages in one go and write
+     atomically.*)
+
+  let (request_reader, request_writer) = Pipe.create () in
+
+  (* Lets map the reader *)
+  let handle_request { command; waiter } =
+    Queue.enqueue waiters waiter;
+    let request = construct_request command in
+    Writer.write writer request;
+    return ()
+  in
+  don't_wait_for (Pipe.iter request_reader ~f:handle_request);
+  don't_wait_for (Pipe.closed request_writer >>= fun () -> Writer.close writer);
+
+  { waiters; writer = request_writer }
+
+let connect ?(port = 6379) ~host =
+  let where =
+    Tcp.Where_to_connect.of_host_and_port @@ Host_and_port.create ~host ~port
+  in
+  let%bind _socket, reader, writer = Tcp.connect where in
+  return @@ init reader writer
+
+let close { waiters = _; writer } =
+  Pipe.close writer;
+  Pipe.closed writer
+
+let request t command : (Resp.t, [> common_error ]) Deferred.Result.t =
+  let waiter = Ivar.create () in
+  let%bind () = Pipe.write t.writer { command; waiter } in
+  (* Type coersion *)
+  Ivar.read waiter >>= function
+  | Ok r -> Deferred.Result.return r
+  | Error `Connection_closed -> Deferred.Result.fail `Connection_closed
+  | Error `Eof -> Deferred.Result.fail `Eof
+  | Error `Unexpected -> Deferred.Result.fail `Unexpected
+
+let echo t message : (string, [> common_error]) Deferred.Result.t =
   let open Deferred.Result.Let_syntax in
   match%bind request t ["ECHO"; message] with
   | Resp.Bulk v -> return v
@@ -135,8 +194,8 @@ let auth t password =
   let open Deferred.Result.Let_syntax in
   match%bind request t ["AUTH"; password] with
   | Resp.String "OK" -> return ()
-  | Resp.Error e -> Deferred.return @@ Error (`Redis_error e)
-  | _ -> Deferred.return @@ Error `Unexpected
+  | Resp.Error e -> Deferred.Result.fail (`Redis_error e)
+  | _ -> Deferred.Result.fail `Unexpected
 
 let bgrewriteaof t =
   let open Deferred.Result.Let_syntax in
@@ -516,24 +575,3 @@ let restore t ~key ?ttl ?replace value =
   match%bind request t (["RESTORE"; key; ttl; value] @ replace) with
   | Resp.String "OK" -> return ()
   | _ -> Deferred.return @@ Error `Unexpected
-
-let init reader writer = {reader; writer}
-
-let connect ?(port = 6379) ~host =
-  let where =
-    Tcp.Where_to_connect.of_host_and_port @@ Host_and_port.create ~host ~port
-  in
-  let%bind _socket, reader, writer = Tcp.connect where in
-  return @@ init reader writer
-
-let close {reader; writer} =
-  let%bind () = Writer.close writer in
-  Reader.close reader
-
-let with_connection ?(port = 6379) ~host f =
-  let where =
-    Tcp.Where_to_connect.of_host_and_port @@ Host_and_port.create ~host ~port
-  in
-  Tcp.with_connection where @@ fun _socket reader writer ->
-  let t = init reader writer in
-  f t
