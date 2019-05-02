@@ -1,3 +1,6 @@
+0.1.1
+=====
+
 * Expose result of `SET`
 * Fix bug when setting non-existing key
 
