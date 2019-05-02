@@ -72,7 +72,14 @@ let test_set () =
   Orewa.with_connection ~host @@ fun conn ->
   let key = random_key () in
   let%bind res = Orewa.set conn ~key "value" in
-  Alcotest.(check be) "SET failed" (Ok true) res;
+  Alcotest.(check be) "Successfully SET" (Ok true) res;
+  let%bind res = Orewa.set conn ~key ~exist:Orewa.Not_if_exists "other" in
+  Alcotest.(check be) "Didn't SET again" (Ok false) res;
+  let%bind res = Orewa.set conn ~key ~exist:Orewa.Only_if_exists "other" in
+  Alcotest.(check be) "Successfully re-SET" (Ok true) res;
+  let not_existing = random_key () in
+  let%bind res = Orewa.set conn ~key:not_existing ~exist:Orewa.Only_if_exists "value" in
+  Alcotest.(check be) "Didn't SET non-existing" (Ok false) res;
   return ()
 
 let test_get () =

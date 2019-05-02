@@ -1,4 +1,5 @@
 * Expose result of `SET`
+* Fix bug when setting non-existing key
 
 0.1.0
 =====

@@ -43,7 +43,7 @@ let set t ~key ?expire ?exist value =
     match exist with
     | None -> []
     | Some Not_if_exists -> ["NX"]
-    | Some Only_if_exists -> ["PX"]
+    | Some Only_if_exists -> ["XX"]
   in
   let command = ["SET"; key; value] @ expiry @ existence in
   match%bind request t command with
