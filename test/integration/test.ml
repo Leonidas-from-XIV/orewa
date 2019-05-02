@@ -20,6 +20,8 @@ let err = Alcotest.testable Orewa_error.pp Orewa_error.equal
 
 let ue = Alcotest.(result unit err)
 
+let be = Alcotest.(result bool err)
+
 let ie = Alcotest.(result int err)
 
 let se = Alcotest.(result string err)
@@ -70,7 +72,7 @@ let test_set () =
   Orewa.with_connection ~host @@ fun conn ->
   let key = random_key () in
   let%bind res = Orewa.set conn ~key "value" in
-  Alcotest.(check ue) "SET failed" (Ok ()) res;
+  Alcotest.(check be) "SET failed" (Ok true) res;
   return ()
 
 let test_get () =
@@ -181,7 +183,7 @@ let test_set_expiry () =
   let value = random_key () in
   let expire = Time.Span.of_ms 200. in
   let%bind res = Orewa.set conn ~key ~expire value in
-  Alcotest.(check ue) "Correctly SET expiry" (Ok ()) res;
+  Alcotest.(check be) "Correctly SET expiry" (Ok true) res;
   let%bind res = Orewa.get conn key in
   Alcotest.(check soe) "Key still exists" (Ok (Some value)) res;
   let%bind () = after Time.Span.(expire / 0.75) in
@@ -194,7 +196,7 @@ let test_large_set_get () =
   let key = random_key () in
   let value = String.init exceeding_read_buffer ~f:(fun _ -> 'a') in
   let%bind res = Orewa.set conn ~key value in
-  Alcotest.(check ue) "Large SET failed" (Ok ()) res;
+  Alcotest.(check be) "Large SET failed" (Ok true) res;
   let%bind res = Orewa.get conn key in
   Alcotest.(check soe) "Large GET retrieves everything" (Ok (Some value)) res;
   return ()

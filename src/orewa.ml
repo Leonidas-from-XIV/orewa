@@ -47,7 +47,8 @@ let set t ~key ?expire ?exist value =
   in
   let command = ["SET"; key; value] @ expiry @ existence in
   match%bind request t command with
-  | Resp.String "OK" -> return ()
+  | Resp.Null -> return false
+  | Resp.String "OK" -> return true
   | _ -> Deferred.return @@ Error `Unexpected
 
 let get t key =

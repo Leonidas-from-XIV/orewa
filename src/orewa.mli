@@ -21,7 +21,7 @@ val set
   ?expire:Time.Span.t ->
   ?exist:exist ->
   string ->
-  (unit, [> common_error]) Deferred.Result.t
+  (bool, [> common_error]) Deferred.Result.t
 
 val get : t -> string -> (string option, [> common_error]) Deferred.Result.t
 

@@ -1,3 +1,5 @@
+* Expose result of `SET`
+
 0.1.0
 =====
 
