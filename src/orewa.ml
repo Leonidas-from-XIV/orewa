@@ -198,7 +198,7 @@ let auth t password =
   let open Deferred.Result.Let_syntax in
   match%bind request t ["AUTH"; password] with
   | Resp.String "OK" -> return ()
-  | Resp.Error e -> Deferred.Result.fail (`Redis_error e)
+  | Resp.Error e -> Deferred.return @@ Error (`Redis_error e)
   | _ -> Deferred.return @@ Error `Unexpected
 
 let bgrewriteaof t =
