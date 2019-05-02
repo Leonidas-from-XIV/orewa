@@ -1,12 +1,20 @@
 open Core
 open Async
 
-type common_error = [ `Connection_closed | `Eof | `Unexpected ]
+type common_error =
+  [ `Connection_closed
+  | `Eof
+  | `Unexpected ]
 [@@deriving show, eq]
 
 type response = (Resp.t, common_error) result
+
 type command = string list
-type request = { command: command; waiter: response Ivar.t }
+
+type request = {
+  command : command;
+  waiter : response Ivar.t
+}
 
 let construct_request commands =
   commands
@@ -16,8 +24,8 @@ let construct_request commands =
 
 type t = {
   (* Need a queue of waiter Ivars. Need some way of closing the connection *)
-  waiters: response Ivar.t Queue.t;
-  writer : request Pipe.Writer.t;
+  waiters : response Ivar.t Queue.t;
+  writer : request Pipe.Writer.t
 }
 
 let init reader writer =
@@ -25,40 +33,35 @@ let init reader writer =
   let waiters = Queue.create () in
   let rec recv_loop reader =
     Parser.read_resp reader >>= function
-    | (Error _) as error ->
-      (* Signal this to all waiters.*)
-      Queue.iter waiters ~f:(fun waiter -> Ivar.fill waiter error);
-      Queue.clear waiters;
-      return ()
-    | Ok _ as result -> begin
-        match Queue.dequeue waiters with
-        | None -> failwith "No one is waiting for this reply. Was the connection closed, and we still get messages?"
-        | Some waiter ->
-          Ivar.fill waiter result;
-          recv_loop reader
-      end
+    | Error _ as error ->
+        (* Signal this to all waiters.*)
+        Queue.iter waiters ~f:(fun waiter -> Ivar.fill waiter error);
+        Queue.clear waiters;
+        return ()
+    | Ok _ as result -> (
+      match Queue.dequeue waiters with
+      | None ->
+          failwith
+            "No one is waiting for this reply. Was the connection closed, and we still \
+             get messages?"
+      | Some waiter -> Ivar.fill waiter result; recv_loop reader )
   in
   don't_wait_for (recv_loop reader);
-
   (* Create a writer. Its a pipe onto which requests are sent, as we
      need to serialize in an orderly fashion. We don't want to have
      multiple threads writing to the socket concurrently - even if we
      could create the complete messages in one go and write
      atomically.*)
-
-  let (request_reader, request_writer) = Pipe.create () in
-
+  let request_reader, request_writer = Pipe.create () in
   (* Lets map the reader *)
-  let handle_request { command; waiter } =
+  let handle_request {command; waiter} =
     Queue.enqueue waiters waiter;
     let request = construct_request command in
-    Writer.write writer request;
-    return ()
+    Writer.write writer request; return ()
   in
   don't_wait_for (Pipe.iter request_reader ~f:handle_request);
   don't_wait_for (Pipe.closed request_writer >>= fun () -> Writer.close writer);
-
-  { waiters; writer = request_writer }
+  {waiters; writer = request_writer}
 
 let connect ?(port = 6379) ~host =
   let where =
@@ -67,21 +70,17 @@ let connect ?(port = 6379) ~host =
   let%bind _socket, reader, writer = Tcp.connect where in
   return @@ init reader writer
 
-let close { waiters = _; writer } =
-  Pipe.close writer;
-  Pipe.closed writer
+let close {waiters = _; writer} = Pipe.close writer; Pipe.closed writer
 
 let request t command =
   let waiter = Ivar.create () in
-  let%bind () = Pipe.write t.writer { command; waiter } in
+  let%bind () = Pipe.write t.writer {command; waiter} in
   Ivar.read waiter
   (* Type coercion*)
-  |> Deferred.Result.map_error
-    ~f:(function
-        | `Connection_closed -> `Connection_closed
-        | `Eof -> `Eof
-        | `Unexpected -> `Unexpected
-      )
+  |> Deferred.Result.map_error ~f:(function
+         | `Connection_closed -> `Connection_closed
+         | `Eof -> `Eof
+         | `Unexpected -> `Unexpected )
 
 let echo t message : (string, [> common_error]) Deferred.Result.t =
   let open Deferred.Result.Let_syntax in
