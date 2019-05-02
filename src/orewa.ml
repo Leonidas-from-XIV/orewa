@@ -44,7 +44,10 @@ let init reader writer =
           failwith
             "No one is waiting for this reply. Was the connection closed, and we still \
              get messages?"
-      | Some waiter -> Ivar.fill waiter result; recv_loop reader )
+      | Some waiter ->
+          Log.Global.debug "Dequeue: current waiters: %d" (Queue.length waiters);
+          Ivar.fill waiter result;
+          recv_loop reader )
   in
   don't_wait_for (recv_loop reader);
   (* Create a writer. Its a pipe onto which requests are sent, as we
@@ -56,6 +59,7 @@ let init reader writer =
   (* Lets map the reader *)
   let handle_request {command; waiter} =
     Queue.enqueue waiters waiter;
+    Log.Global.debug "Enqueue: current waiters: %d" (Queue.length waiters);
     let request = construct_request command in
     Writer.write writer request; return ()
   in
