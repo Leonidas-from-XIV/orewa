@@ -4,12 +4,12 @@ open Async
 let read_char reader =
   Reader.read_char reader >>| function
   | `Ok c -> Ok c
-  | `Eof -> Error `Eof
+  | `Eof -> Error `Connection_closed
 
 let read_string reader =
-  Reader.read_line reader >>= function
-  | `Eof -> Deferred.Result.fail `Eof
-  | `Ok s -> Deferred.Result.return s
+  Reader.read_line reader >>| function
+  | `Eof -> Error `Connection_closed
+  | `Ok s -> Ok s
 
 let flush_line reader = read_string reader |> Deferred.Result.map ~f:ignore
 
@@ -17,9 +17,9 @@ let read_int reader = read_string reader |> Deferred.Result.map ~f:int_of_string
 
 let read_bulk ~len reader =
   let s = Bytes.create len in
-  Reader.really_read reader s >>= function
-  | `Eof _ -> Deferred.Result.fail `Eof
-  | `Ok -> Deferred.Result.return (Bytes.to_string s)
+  Reader.really_read reader s >>| function
+  | `Eof _ -> Error `Connection_closed
+  | `Ok -> Ok (Bytes.to_string s)
 
 let rec read_resp reader =
   let open Deferred.Result.Let_syntax in

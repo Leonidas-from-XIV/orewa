@@ -742,6 +742,31 @@ let test_pipelining () =
   in
   return ()
 
+let test_close () =
+  let%bind conn = Orewa.connect ?port:None ~host in
+  let key = random_key () in
+  let%bind res = Orewa.set conn ~key "test" in
+  Alcotest.(check ue) "Set test key" (Ok ()) res;
+  (* Create N requests to read the key. Half way through we close the connection,
+     and expect all results either to be ok or connection closed
+     - All deferreds must have been determined! *)
+  let gets =
+    List.init 1000 ~f:(fun i ->
+        let res = Orewa.get conn key in
+        if i = 500 then Orewa.close conn >>= fun () -> res else res )
+  in
+  let%bind () =
+    Deferred.List.iteri
+      ~f:(fun i get ->
+        get >>| function
+        | Ok _ as r ->
+            Alcotest.(check soe) (sprintf "Get test key: %d" i) (Ok (Some "test")) r
+        | Error _ as r ->
+            Alcotest.(check soe) (sprintf "Closed: %d" i) (Error `Connection_closed) r )
+      gets
+  in
+  return ()
+
 let tests =
   Alcotest_async.
     [ test_case "ECHO" `Slow test_echo;
@@ -790,7 +815,8 @@ let tests =
       test_case "TYPE" `Slow test_type';
       test_case "DUMP" `Slow test_dump;
       test_case "RESTORE" `Slow test_restore;
-      test_case "PIPELINE" `Slow test_pipelining ]
+      test_case "PIPELINE" `Slow test_pipelining;
+      test_case "CLOSE" `Slow test_close ]
 
 let () =
   Log.Global.set_level `Debug;

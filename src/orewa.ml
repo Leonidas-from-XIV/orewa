@@ -3,7 +3,6 @@ open Async
 
 type common_error =
   [ `Connection_closed
-  | `Eof
   | `Unexpected ]
 [@@deriving show, eq]
 
@@ -25,47 +24,45 @@ let construct_request commands =
 type t = {
   (* Need a queue of waiter Ivars. Need some way of closing the connection *)
   waiters : response Ivar.t Queue.t;
+  reader : request Pipe.Reader.t;
   writer : request Pipe.Writer.t
 }
 
 let init reader writer =
-  (* Reader and writer are byte streams *)
   let waiters = Queue.create () in
   let rec recv_loop reader =
-    Parser.read_resp reader >>= function
-    | Error _ as error ->
-        (* Signal this to all waiters.*)
-        Queue.iter waiters ~f:(fun waiter -> Ivar.fill waiter error);
-        Queue.clear waiters;
-        return ()
-    | Ok _ as result -> (
+    Monitor.try_with_or_error (fun () -> Parser.read_resp reader) >>= function
+    | Error _ | Ok (Error _) -> return ()
+    | Ok (Ok r as result) -> (
       match Queue.dequeue waiters with
-      | None ->
-          failwith
-            "No one is waiting for this reply. Was the connection closed, and we still \
-             get messages?"
-      | Some waiter ->
-          Log.Global.debug "Dequeue: current waiters: %d" (Queue.length waiters);
-          Ivar.fill waiter result;
-          recv_loop reader )
+      | None when Reader.is_closed reader -> return ()
+      | None -> failwithf "No waiters are waiting for this message: %s" (Resp.show r) ()
+      | Some waiter -> Ivar.fill waiter result; recv_loop reader )
   in
-  don't_wait_for (recv_loop reader);
-  (* Create a writer. Its a pipe onto which requests are sent, as we
-     need to serialize in an orderly fashion. We don't want to have
-     multiple threads writing to the socket concurrently - even if we
-     could create the complete messages in one go and write
-     atomically.*)
+  (* Requests are posted to a pipe, and requests are processed in sequence *)
   let request_reader, request_writer = Pipe.create () in
-  (* Lets map the reader *)
   let handle_request {command; waiter} =
     Queue.enqueue waiters waiter;
-    Log.Global.debug "Enqueue: current waiters: %d" (Queue.length waiters);
     let request = construct_request command in
     Writer.write writer request; return ()
   in
-  don't_wait_for (Pipe.iter request_reader ~f:handle_request);
-  don't_wait_for (Pipe.closed request_writer >>= fun () -> Writer.close writer);
-  {waiters; writer = request_writer}
+  (* Start redis receiver. Processing ends if the connection is closed. *)
+  don't_wait_for
+    (let%bind () = recv_loop reader in
+     Pipe.close request_writer; return ());
+  (* Start processing requests. Once the pipe is closed, we signal
+     closed to all outstanding waiters after closing the underlying
+     socket *)
+  don't_wait_for
+    (let%bind () = Pipe.iter request_reader ~f:handle_request in
+     let%bind () = Writer.close writer in
+     let%bind () = Reader.close reader in
+     (* Signal this to all waiters. As the pipe has been closed, we
+        know that no new waiters will arrive *)
+     Queue.iter waiters ~f:(fun waiter -> Ivar.fill waiter @@ Error `Connection_closed);
+     Queue.clear waiters;
+     return ());
+  {waiters; reader = request_reader; writer = request_writer}
 
 let connect ?(port = 6379) ~host =
   let where =
@@ -74,19 +71,21 @@ let connect ?(port = 6379) ~host =
   let%bind _socket, reader, writer = Tcp.connect where in
   return @@ init reader writer
 
-let close {waiters = _; writer} = Pipe.close writer; Pipe.closed writer
+let close {waiters = _; reader = _; writer} = Pipe.close writer; return ()
 
 let request t command =
-  let waiter = Ivar.create () in
-  let%bind () = Pipe.write t.writer {command; waiter} in
-  Ivar.read waiter
-  (* Type coercion*)
-  |> Deferred.Result.map_error ~f:(function
-         | `Connection_closed -> `Connection_closed
-         | `Eof -> `Eof
-         | `Unexpected -> `Unexpected )
+  match Pipe.is_closed t.writer with
+  | true -> Deferred.Result.fail `Connection_closed
+  | false ->
+      let waiter = Ivar.create () in
+      let%bind () = Pipe.write t.writer {command; waiter} in
+      Ivar.read waiter
+      (* Type coercion: [common_error] -> [> common_error] *)
+      |> Deferred.Result.map_error ~f:(function
+             | `Connection_closed -> `Connection_closed
+             | `Unexpected -> `Unexpected )
 
-let echo t message : (string, [> common_error]) Deferred.Result.t =
+let echo t message =
   let open Deferred.Result.Let_syntax in
   match%bind request t ["ECHO"; message] with
   | Resp.Bulk v -> return v
@@ -200,7 +199,7 @@ let auth t password =
   match%bind request t ["AUTH"; password] with
   | Resp.String "OK" -> return ()
   | Resp.Error e -> Deferred.Result.fail (`Redis_error e)
-  | _ -> Deferred.Result.fail `Unexpected
+  | _ -> Deferred.return @@ Error `Unexpected
 
 let bgrewriteaof t =
   let open Deferred.Result.Let_syntax in
