@@ -48,4 +48,4 @@ let rec read_resp reader =
       return (Resp.Array (List.rev elements))
   | unknown ->
       Log.Global.debug "Unparseable type tag %C" unknown;
-      Deferred.Result.fail `Unexpected
+      Deferred.return @@ Error `Unexpected
