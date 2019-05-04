@@ -727,9 +727,9 @@ let test_pipelining () =
   (* Now insert all the keys *)
   let%bind () =
     Deferred.Array.iteri ~how:`Sequential keys ~f:(fun i key ->
-        Orewa.set conn ~key (string_of_int i) >>| function
-        | Ok () -> ()
-        | Error _ -> failwith "could not create keys" )
+        let%bind res = Orewa.set conn ~key (string_of_int i) in
+        Alcotest.(check be) "Set test key" (Ok true) res;
+        return () )
   in
   let%bind () =
     Deferred.Array.iteri
@@ -746,25 +746,12 @@ let test_close () =
   let%bind conn = Orewa.connect ?port:None ~host in
   let key = random_key () in
   let%bind res = Orewa.set conn ~key "test" in
-  Alcotest.(check ue) "Set test key" (Ok ()) res;
-  (* Create N requests to read the key. Half way through we close the connection,
-     and expect all results either to be ok or connection closed
-     - All deferreds must have been determined! *)
-  let gets =
-    List.init 1000 ~f:(fun i ->
-        let res = Orewa.get conn key in
-        if i = 500 then Orewa.close conn >>= fun () -> res else res )
-  in
-  let%bind () =
-    Deferred.List.iteri
-      ~f:(fun i get ->
-        get >>| function
-        | Ok _ as r ->
-            Alcotest.(check soe) (sprintf "Get test key: %d" i) (Ok (Some "test")) r
-        | Error _ as r ->
-            Alcotest.(check soe) (sprintf "Closed: %d" i) (Error `Connection_closed) r )
-      gets
-  in
+  Alcotest.(check be) "Set test key" (Ok true) res;
+  let%bind res = Orewa.get conn key in
+  Alcotest.(check soe) "Get test key" (Ok (Some "test")) res;
+  let%bind () = Orewa.close conn in
+  let%bind res = Orewa.get conn key in
+  Alcotest.(check soe) "Get test key" (Error `Connection_closed) res;
   return ()
 
 let tests =

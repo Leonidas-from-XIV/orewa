@@ -76,14 +76,14 @@ let close {waiters = _; reader = _; writer} = Pipe.close writer; return ()
 let request t command =
   match Pipe.is_closed t.writer with
   | true -> return @@ Error `Connection_closed
-  | false ->
+  | false -> (
       let waiter = Ivar.create () in
       let%bind () = Pipe.write t.writer {command; waiter} in
       (* Type coercion: [common_error] -> [> common_error] *)
       Ivar.read waiter >>| function
       | Ok _ as res -> res
       | Error `Connection_closed -> Error `Connection_closed
-      | Error `Unexpected -> Error `Unexpected
+      | Error `Unexpected -> Error `Unexpected )
 
 let echo t message =
   let open Deferred.Result.Let_syntax in
