@@ -29,10 +29,11 @@ let echo t message =
   | _ -> Deferred.return @@ Error `Unexpected
 
 type exist =
+  | Always
   | Not_if_exists
   | Only_if_exists
 
-let set t ~key ?expire ?exist value =
+let set t ~key ?expire ?(exist = Always) value =
   let open Deferred.Result.Let_syntax in
   let expiry =
     match expire with
@@ -41,9 +42,9 @@ let set t ~key ?expire ?exist value =
   in
   let existence =
     match exist with
-    | None -> []
-    | Some Not_if_exists -> ["NX"]
-    | Some Only_if_exists -> ["XX"]
+    | Always -> []
+    | Not_if_exists -> ["NX"]
+    | Only_if_exists -> ["XX"]
   in
   let command = ["SET"; key; value] @ expiry @ existence in
   match%bind request t command with
