@@ -3,6 +3,7 @@
   @andersfugmann)
 * Remove `` `Eof`` error code since it was semantically equal to ``
   `Connection_closed`` (@andersfugmann)
+* Added `Always` option to `SET` to explicitly specify the default
 
 0.1.1
 =====
