@@ -1,3 +1,9 @@
+* Implement pipelining while simplifying parsing: it is now possible to queue
+  up a lot of requests to Redis that will be fulfilled in order (thanks,
+  @andersfugmann)
+* Remove `` `Eof`` error code since it was semantically equal to ``
+  `Connection_closed`` (@andersfugmann)
+
 0.1.1
 =====
 
