@@ -722,7 +722,7 @@ let test_pipelining () =
   Orewa.with_connection ~host @@ fun conn ->
   (* Test that we in parallel can do multiple requests *)
   let prefix = random_key () in
-  let key i = sprintf "%s.%d" prefix i in
+  let key i = Printf.sprintf "%s.%d" prefix i in
   let keys = Array.init 1000 ~f:key in
   (* Now insert all the keys *)
   let%bind () =

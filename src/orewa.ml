@@ -44,12 +44,12 @@ let init reader writer =
   let handle_request {command; waiter} =
     Queue.enqueue waiters waiter;
     let request = construct_request command in
-    Writer.write writer request; return ()
+    return @@ Writer.write writer request
   in
   (* Start redis receiver. Processing ends if the connection is closed. *)
   don't_wait_for
     (let%bind () = recv_loop reader in
-     Pipe.close request_writer; return ());
+     return @@ Pipe.close request_writer);
   (* Start processing requests. Once the pipe is closed, we signal
      closed to all outstanding waiters after closing the underlying
      socket *)
@@ -60,8 +60,7 @@ let init reader writer =
      (* Signal this to all waiters. As the pipe has been closed, we
         know that no new waiters will arrive *)
      Queue.iter waiters ~f:(fun waiter -> Ivar.fill waiter @@ Error `Connection_closed);
-     Queue.clear waiters;
-     return ());
+     return @@ Queue.clear waiters);
   {waiters; reader = request_reader; writer = request_writer}
 
 let connect ?(port = 6379) ~host =
@@ -71,7 +70,7 @@ let connect ?(port = 6379) ~host =
   let%bind _socket, reader, writer = Tcp.connect where in
   return @@ init reader writer
 
-let close {waiters = _; reader = _; writer} = Pipe.close writer; return ()
+let close {writer; _} = return @@ Pipe.close writer
 
 let request t command =
   match Pipe.is_closed t.writer with
