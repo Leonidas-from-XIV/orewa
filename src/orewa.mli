@@ -5,7 +5,6 @@ type t
 
 type common_error =
   [ `Connection_closed
-  | `Eof
   | `Unexpected ]
 [@@deriving show, eq]
 
