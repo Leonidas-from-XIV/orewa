@@ -1,3 +1,6 @@
+0.2.0
+=====
+
 * Implement pipelining while simplifying parsing: it is now possible to queue
   up a lot of requests to Redis that will be fulfilled in order (thanks,
   @andersfugmann)
