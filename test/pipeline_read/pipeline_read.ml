@@ -6,7 +6,7 @@ let host = "localhost"
 let key = "testkey1"
 
 let rec req conn =
-  Orewa.get conn key >>= function
+  match%bind Orewa.get conn key with
   | Ok _ -> req conn
   | Error _ -> eprintf "Done\n%!"; return ()
 

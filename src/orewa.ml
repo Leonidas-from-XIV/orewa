@@ -31,7 +31,7 @@ type t = {
 let init reader writer =
   let waiters = Queue.create () in
   let rec recv_loop reader =
-    Monitor.try_with_or_error (fun () -> Parser.read_resp reader) >>= function
+    match%bind Monitor.try_with_or_error @@ fun () -> Parser.read_resp reader with
     | Error _ | Ok (Error _) -> return ()
     | Ok (Ok r as result) -> (
       match Queue.dequeue waiters with
@@ -80,7 +80,7 @@ let request t command =
       let waiter = Ivar.create () in
       let%bind () = Pipe.write t.writer {command; waiter} in
       (* Type coercion: [common_error] -> [> common_error] *)
-      Ivar.read waiter >>| function
+      match%map Ivar.read waiter with
       | Ok _ as res -> res
       | Error `Connection_closed -> Error `Connection_closed
       | Error `Unexpected -> Error `Unexpected )

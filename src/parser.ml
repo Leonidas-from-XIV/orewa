@@ -2,12 +2,12 @@ open Core
 open Async
 
 let read_char reader =
-  Reader.read_char reader >>| function
+  match%map Reader.read_char reader with
   | `Ok c -> Ok c
   | `Eof -> Error `Connection_closed
 
 let read_string reader =
-  Reader.read_line reader >>| function
+  match%map Reader.read_line reader with
   | `Eof -> Error `Connection_closed
   | `Ok s -> Ok s
 
@@ -17,7 +17,7 @@ let read_int reader = read_string reader |> Deferred.Result.map ~f:int_of_string
 
 let read_bulk ~len reader =
   let s = Bytes.create len in
-  Reader.really_read reader s >>| function
+  match%map Reader.really_read reader s with
   | `Eof _ -> Error `Connection_closed
   | `Ok -> Ok (Bytes.to_string s)
 
