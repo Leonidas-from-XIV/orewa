@@ -536,9 +536,12 @@ let test_sdiff () =
   let key1 = random_key () in
   let key2 = random_key () in
   let%bind _ = Orewa.sadd conn ~key:key1 "a" ~members:["b"; "c"] in
-  let%bind _ = Orewa.sadd conn ~key:key2 "c" ~members:["b"; "d"; "e"] in
+  let%bind _ = Orewa.sadd conn ~key:key2 "c" ~members:["d"; "e"] in
   let%bind res = Orewa.sdiff conn key1 ~keys:[key2] in
-  Alcotest.(check (result (list string) err)) "Correct differing set" (Ok ["a"]) res;
+  Alcotest.(check (result unordered_string_list err))
+    "Correct differing set"
+    (Ok ["a"; "b"])
+    res;
   return ()
 
 let test_sdiffstore () =
@@ -559,7 +562,10 @@ let test_sinter () =
   let%bind _ = Orewa.sadd conn ~key:key1 "a" ~members:["b"; "c"] in
   let%bind _ = Orewa.sadd conn ~key:key2 "c" ~members:["d"; "e"] in
   let%bind res = Orewa.sinter conn key1 ~keys:[key2] in
-  Alcotest.(check (result (list string) err)) "Correct differing set" (Ok ["c"]) res;
+  Alcotest.(check (result unordered_string_list err))
+    "Correct differing set"
+    (Ok ["c"])
+    res;
   return ()
 
 let test_sinterstore () =
@@ -684,8 +690,10 @@ let test_sunion () =
   let%bind _ = Orewa.sadd conn ~key:key1 "a" ~members:["b"; "c"] in
   let%bind _ = Orewa.sadd conn ~key:key2 "c" ~members:["d"; "e"] in
   let%bind res = Orewa.sunion conn key1 ~keys:[key2] in
-  let length = Result.map ~f:List.length in
-  Alcotest.(check (result int err)) "Correct differing set" (Ok 5) (length res);
+  Alcotest.(check (result unordered_string_list err))
+    "Correct differing set"
+    (Ok ["a"; "b"; "c"; "d"; "e"])
+    res;
   return ()
 
 let test_sunionstore () =
@@ -732,7 +740,7 @@ let test_scan () =
         return key )
   in
   let pattern = prefix ^ "*" in
-  let pipe = Orewa.scan ~pattern ~count conn in
+  let pipe = Orewa.scan ~pattern ~count:4 conn in
   let%bind q = Pipe.read_all pipe in
   let res = Queue.to_list q in
   Alcotest.(check unordered_string_list) "Returns the right keys" expected_keys res;
