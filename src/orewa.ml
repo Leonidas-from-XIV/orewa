@@ -503,6 +503,18 @@ let smove t ~source ~destination member =
   | Resp.Integer 1 -> return true
   | _ -> Deferred.return @@ Error `Unexpected
 
+let spop t ?(count = 1) key =
+  let open Deferred.Result.Let_syntax in
+  match%bind request t ["SPOP"; key; string_of_int count] with
+  | Resp.Array res ->
+      res
+      |> List.map ~f:(function
+             | Resp.Bulk v -> Ok v
+             | _ -> Error `Unexpected )
+      |> Result.all
+      |> Deferred.return
+  | _ -> Deferred.return @@ Error `Unexpected
+
 let scan ?pattern ?count t =
   let pattern =
     match pattern with

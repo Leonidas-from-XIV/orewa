@@ -622,6 +622,25 @@ let test_smove () =
   Alcotest.(check (result bool err)) "Correctly arrived in destination" (Ok true) res;
   return ()
 
+let test_spop () =
+  Orewa.with_connection ~host @@ fun conn ->
+  let key = random_key () in
+  let%bind res = Orewa.spop conn key in
+  Alcotest.(check (result (list string) err)) "Popping from nonexistent set" (Ok []) res;
+  let%bind _ = Orewa.sadd conn ~key "a" ~members:["b"; "c"] in
+  let%bind res = Orewa.spop conn key in
+  let length = Result.map ~f:List.length in
+  Alcotest.(check (result int err)) "Popping one from existing set" (Ok 1) (length res);
+  let count = 2 in
+  let%bind res = Orewa.spop conn ~count key in
+  Alcotest.(check (result int err))
+    "Popping rest from existing set"
+    (Ok count)
+    (length res);
+  let%bind res = Orewa.scard conn key in
+  Alcotest.(check (result int err)) "Set is empty now" (Ok 0) res;
+  return ()
+
 let test_scan () =
   Orewa.with_connection ~host @@ fun conn ->
   let prefix = random_key () in
@@ -919,6 +938,7 @@ let tests =
       test_case "SINTERSTORE" `Slow test_sinterstore;
       test_case "SISMEMBER" `Slow test_sismember;
       test_case "SMEMBERS" `Slow test_smembers;
+      test_case "SPOP" `Slow test_spop;
       test_case "SCAN" `Slow test_scan;
       test_case "MOVE" `Slow test_move;
       test_case "PERSIST" `Slow test_persist;
