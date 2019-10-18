@@ -496,6 +496,13 @@ let smembers t key =
       |> Deferred.return
   | _ -> Deferred.return @@ Error `Unexpected
 
+let smove t ~source ~destination member =
+  let open Deferred.Result.Let_syntax in
+  match%bind request t ["SISMEMBER"; source; destination; member] with
+  | Resp.Integer 0 -> return false
+  | Resp.Integer 1 -> return true
+  | _ -> Deferred.return @@ Error `Unexpected
+
 let scan ?pattern ?count t =
   let pattern =
     match pattern with

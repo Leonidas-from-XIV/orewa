@@ -603,6 +603,25 @@ let test_smembers () =
   Alcotest.(check (result (list string) err)) "Members in existent set" (Ok [member]) res;
   return ()
 
+let test_smove () =
+  Orewa.with_connection ~host @@ fun conn ->
+  let source = random_key () in
+  let destination = random_key () in
+  let member = "aaa" in
+  let%bind res = Orewa.smove conn ~source ~destination member in
+  Alcotest.(check (result bool err))
+    "Moving from a set where not member is noop"
+    (Ok false)
+    res;
+  let%bind _ = Orewa.sadd conn ~key:source member in
+  let%bind res = Orewa.smove conn ~source ~destination member in
+  Alcotest.(check (result bool err)) "Moving from a set works" (Ok false) res;
+  let%bind res = Orewa.sismember conn ~key:source member in
+  Alcotest.(check (result bool err)) "Correctly removed from source" (Ok false) res;
+  let%bind res = Orewa.sismember conn ~key:destination member in
+  Alcotest.(check (result bool err)) "Correctly arrived in destination" (Ok true) res;
+  return ()
+
 let test_scan () =
   Orewa.with_connection ~host @@ fun conn ->
   let prefix = random_key () in
