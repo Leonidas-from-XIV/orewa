@@ -1,3 +1,5 @@
+* Support all set commands as of Redis 5.0
+
 0.2.0
 =====
 
