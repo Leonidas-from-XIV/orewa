@@ -545,6 +545,12 @@ let sunion t ?(keys = []) key =
       |> Deferred.return
   | _ -> Deferred.return @@ Error `Unexpected
 
+let sunionstore t ~destination ?(keys = []) ~key =
+  let open Deferred.Result.Let_syntax in
+  match%bind request t ("SUNIONSTORE" :: destination :: key :: keys) with
+  | Resp.Integer n -> return n
+  | _ -> Deferred.return @@ Error `Unexpected
+
 let scan ?pattern ?count t =
   let pattern =
     match pattern with

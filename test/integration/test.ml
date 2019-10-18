@@ -688,6 +688,22 @@ let test_sunion () =
   Alcotest.(check (result int err)) "Correct differing set" (Ok 5) (length res);
   return ()
 
+let test_sunionstore () =
+  Orewa.with_connection ~host @@ fun conn ->
+  let key1 = random_key () in
+  let key2 = random_key () in
+  let destination = random_key () in
+  let%bind _ = Orewa.sadd conn ~key:key1 "a" ~members:["b"; "c"] in
+  let%bind _ = Orewa.sadd conn ~key:key2 "c" ~members:["d"; "e"] in
+  let%bind res = Orewa.sunionstore conn ~destination ~key:key1 ~keys:[key2] in
+  Alcotest.(check (result int err))
+    "The right amount of members was calculated"
+    (Ok 5)
+    res;
+  let%bind res = Orewa.scard conn destination in
+  Alcotest.(check (result int err)) "The right members are in the new set" (Ok 5) res;
+  return ()
+
 let test_scan () =
   Orewa.with_connection ~host @@ fun conn ->
   let prefix = random_key () in
@@ -989,6 +1005,7 @@ let tests =
       test_case "SRANDMEMBER" `Slow test_srandmember;
       test_case "SREM" `Slow test_srem;
       test_case "SUNION" `Slow test_sunion;
+      test_case "SUNIONSTORE" `Slow test_sunionstore;
       test_case "SCAN" `Slow test_scan;
       test_case "MOVE" `Slow test_move;
       test_case "PERSIST" `Slow test_persist;
