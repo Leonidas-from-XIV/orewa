@@ -502,6 +502,21 @@ let test_keys () =
   Alcotest.(check (result (list string) err)) "Returns no keys" (Ok []) res;
   return ()
 
+let test_sadd () =
+  Orewa.with_connection ~host @@ fun conn ->
+  let key = random_key () in
+  let zero = "0" in
+  let dup = "dup" in
+  let%bind res = Orewa.sadd conn ~key zero in
+  Alcotest.(check (result int err)) "Inserts single value" (Ok 1) res;
+  let%bind res = Orewa.sadd conn ~key "a" ~members:["b"; "c"] in
+  Alcotest.(check (result int err)) "Inserts multiple values" (Ok 3) res;
+  let%bind res = Orewa.sadd conn ~key zero in
+  Alcotest.(check (result int err)) "Skips single duplicate value" (Ok 0) res;
+  let%bind res = Orewa.sadd conn ~key dup ~members:[zero; dup] in
+  Alcotest.(check (result int err)) "Skips multiple duplicate value" (Ok 1) res;
+  return ()
+
 let test_scan () =
   Orewa.with_connection ~host @@ fun conn ->
   let prefix = random_key () in
@@ -791,6 +806,7 @@ let tests =
       test_case "EXPIRE" `Slow test_expire;
       test_case "EXPIREAT" `Slow test_expireat;
       test_case "KEYS" `Slow test_keys;
+      test_case "SADD" `Slow test_sadd;
       test_case "SCAN" `Slow test_scan;
       test_case "MOVE" `Slow test_move;
       test_case "PERSIST" `Slow test_persist;

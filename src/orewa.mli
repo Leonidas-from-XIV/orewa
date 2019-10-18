@@ -154,6 +154,13 @@ val expireat : t -> string -> Time.t -> (int, [> common_error]) Deferred.Result.
 
 val keys : t -> string -> (string list, [> common_error]) Deferred.Result.t
 
+val sadd
+  :  t ->
+  key:string ->
+  ?members:string list ->
+  string ->
+  (int, [> common_error]) Deferred.Result.t
+
 val scan : ?pattern:string -> ?count:int -> t -> string Pipe.Reader.t
 
 val move : t -> string -> int -> (bool, [> common_error]) Deferred.Result.t
