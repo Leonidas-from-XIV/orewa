@@ -418,15 +418,17 @@ let expireat t key dt =
   | Resp.Integer n -> return n
   | _ -> Deferred.return @@ Error `Unexpected
 
+let coerce_bulk_array xs =
+  xs
+  |> List.map ~f:(function
+         | Resp.Bulk key -> Ok key
+         | _ -> Error `Unexpected )
+  |> Result.all
+
 let keys t pattern =
   let open Deferred.Result.Let_syntax in
   match%bind request t ["KEYS"; pattern] with
-  | Resp.Array xs ->
-      List.map xs ~f:(function
-          | Resp.Bulk key -> Ok key
-          | _ -> Error `Unexpected )
-      |> Result.all
-      |> Deferred.return
+  | Resp.Array xs -> xs |> coerce_bulk_array |> Deferred.return
   | _ -> Deferred.return @@ Error `Unexpected
 
 let sadd t ~key ?(members = []) member =
@@ -441,41 +443,25 @@ let scard t key =
   | Resp.Integer n -> return n
   | _ -> Deferred.return @@ Error `Unexpected
 
-let sdiff t ?(keys = []) key =
+let generic_setop setop t ?(keys = []) key =
   let open Deferred.Result.Let_syntax in
-  match%bind request t ("SDIFF" :: key :: keys) with
-  | Resp.Array res ->
-      res
-      |> List.map ~f:(function
-             | Resp.Bulk v -> Ok v
-             | _ -> Error `Unexpected )
-      |> Result.all
-      |> Deferred.return
+  match%bind request t (setop :: key :: keys) with
+  | Resp.Array res -> res |> coerce_bulk_array |> Deferred.return
   | _ -> Deferred.return @@ Error `Unexpected
 
-let sdiffstore t ~destination ?(keys = []) ~key =
+let sdiff = generic_setop "SDIFF"
+
+let generic_setop_store setop t ~destination ?(keys = []) ~key =
   let open Deferred.Result.Let_syntax in
-  match%bind request t ("SDIFFSTORE" :: destination :: key :: keys) with
+  match%bind request t (setop :: destination :: key :: keys) with
   | Resp.Integer n -> return n
   | _ -> Deferred.return @@ Error `Unexpected
 
-let sinter t ?(keys = []) key =
-  let open Deferred.Result.Let_syntax in
-  match%bind request t ("SINTER" :: key :: keys) with
-  | Resp.Array res ->
-      res
-      |> List.map ~f:(function
-             | Resp.Bulk v -> Ok v
-             | _ -> Error `Unexpected )
-      |> Result.all
-      |> Deferred.return
-  | _ -> Deferred.return @@ Error `Unexpected
+let sdiffstore = generic_setop_store "SDIFFSTORE"
 
-let sinterstore t ~destination ?(keys = []) ~key =
-  let open Deferred.Result.Let_syntax in
-  match%bind request t ("SINTERSTORE" :: destination :: key :: keys) with
-  | Resp.Integer n -> return n
-  | _ -> Deferred.return @@ Error `Unexpected
+let sinter = generic_setop "SINTER"
+
+let sinterstore = generic_setop_store "SINTERSTORE"
 
 let sismember t ~key member =
   let open Deferred.Result.Let_syntax in
@@ -487,13 +473,7 @@ let sismember t ~key member =
 let smembers t key =
   let open Deferred.Result.Let_syntax in
   match%bind request t ["SMEMBERS"; key] with
-  | Resp.Array res ->
-      res
-      |> List.map ~f:(function
-             | Resp.Bulk v -> Ok v
-             | _ -> Error `Unexpected )
-      |> Result.all
-      |> Deferred.return
+  | Resp.Array res -> res |> coerce_bulk_array |> Deferred.return
   | _ -> Deferred.return @@ Error `Unexpected
 
 let smove t ~source ~destination member =
@@ -506,25 +486,13 @@ let smove t ~source ~destination member =
 let spop t ?(count = 1) key =
   let open Deferred.Result.Let_syntax in
   match%bind request t ["SPOP"; key; string_of_int count] with
-  | Resp.Array res ->
-      res
-      |> List.map ~f:(function
-             | Resp.Bulk v -> Ok v
-             | _ -> Error `Unexpected )
-      |> Result.all
-      |> Deferred.return
+  | Resp.Array res -> res |> coerce_bulk_array |> Deferred.return
   | _ -> Deferred.return @@ Error `Unexpected
 
 let srandmember t ?(count = 1) key =
   let open Deferred.Result.Let_syntax in
   match%bind request t ["SRANDMEMBER"; key; string_of_int count] with
-  | Resp.Array res ->
-      res
-      |> List.map ~f:(function
-             | Resp.Bulk v -> Ok v
-             | _ -> Error `Unexpected )
-      |> Result.all
-      |> Deferred.return
+  | Resp.Array res -> res |> coerce_bulk_array |> Deferred.return
   | _ -> Deferred.return @@ Error `Unexpected
 
 let srem t ~key ?(members = []) member =
@@ -533,25 +501,11 @@ let srem t ~key ?(members = []) member =
   | Resp.Integer n -> return n
   | _ -> Deferred.return @@ Error `Unexpected
 
-let sunion t ?(keys = []) key =
-  let open Deferred.Result.Let_syntax in
-  match%bind request t ("SUNION" :: key :: keys) with
-  | Resp.Array res ->
-      res
-      |> List.map ~f:(function
-             | Resp.Bulk v -> Ok v
-             | _ -> Error `Unexpected )
-      |> Result.all
-      |> Deferred.return
-  | _ -> Deferred.return @@ Error `Unexpected
+let sunion = generic_setop "SUNION"
 
-let sunionstore t ~destination ?(keys = []) ~key =
-  let open Deferred.Result.Let_syntax in
-  match%bind request t ("SUNIONSTORE" :: destination :: key :: keys) with
-  | Resp.Integer n -> return n
-  | _ -> Deferred.return @@ Error `Unexpected
+let sunionstore = generic_setop_store "SUNIONSTORE"
 
-let scan_generic t ?pattern ?count over =
+let generic_scan t ?pattern ?count over =
   let pattern =
     match pattern with
     | Some pattern -> ["MATCH"; pattern]
@@ -579,9 +533,9 @@ let scan_generic t ?pattern ?count over =
       | cursor -> return @@ `Repeat cursor )
   | _ -> failwith "unexpected"
 
-let scan ?pattern ?count t = scan_generic t ?pattern ?count ["SCAN"]
+let scan ?pattern ?count t = generic_scan t ?pattern ?count ["SCAN"]
 
-let sscan t ?pattern ?count key = scan_generic t ?pattern ?count ["SSCAN"; key]
+let sscan t ?pattern ?count key = generic_scan t ?pattern ?count ["SSCAN"; key]
 
 let move t key db =
   let open Deferred.Result.Let_syntax in
