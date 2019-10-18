@@ -178,6 +178,12 @@ val sdiffstore
   key:string ->
   (int, [> common_error]) Deferred.Result.t
 
+val sinter
+  :  t ->
+  ?keys:string list ->
+  string ->
+  (string list, [> common_error]) Deferred.Result.t
+
 val move : t -> string -> int -> (bool, [> common_error]) Deferred.Result.t
 
 val persist : t -> string -> (bool, [> common_error]) Deferred.Result.t
