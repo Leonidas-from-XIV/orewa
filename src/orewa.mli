@@ -210,6 +210,13 @@ val srandmember
   string ->
   (string list, [> common_error]) Deferred.Result.t
 
+val srem
+  :  t ->
+  key:string ->
+  ?members:string list ->
+  string ->
+  (int, [> common_error]) Deferred.Result.t
+
 val move : t -> string -> int -> (bool, [> common_error]) Deferred.Result.t
 
 val persist : t -> string -> (bool, [> common_error]) Deferred.Result.t

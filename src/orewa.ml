@@ -527,6 +527,12 @@ let srandmember t ?(count = 1) key =
       |> Deferred.return
   | _ -> Deferred.return @@ Error `Unexpected
 
+let srem t ~key ?(members = []) member =
+  let open Deferred.Result.Let_syntax in
+  match%bind request t ("SREM" :: key :: member :: members) with
+  | Resp.Integer n -> return n
+  | _ -> Deferred.return @@ Error `Unexpected
+
 let scan ?pattern ?count t =
   let pattern =
     match pattern with

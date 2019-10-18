@@ -664,6 +664,19 @@ let test_srandmember () =
     (length res);
   return ()
 
+let test_srem () =
+  Orewa.with_connection ~host @@ fun conn ->
+  let key = random_key () in
+  let members = ["b"; "c"; "d"] in
+  let%bind _ = Orewa.sadd conn ~key "a" ~members in
+  let%bind res = Orewa.srem conn ~key "a" in
+  Alcotest.(check (result int err)) "Remove single member" (Ok 1) res;
+  let%bind res = Orewa.srem conn ~key "a" ~members in
+  Alcotest.(check (result int err)) "Remove remaining members" (Ok 3) res;
+  let%bind res = Orewa.scard conn key in
+  Alcotest.(check (result int err)) "Set is empty now" (Ok 0) res;
+  return ()
+
 let test_scan () =
   Orewa.with_connection ~host @@ fun conn ->
   let prefix = random_key () in
@@ -963,6 +976,7 @@ let tests =
       test_case "SMEMBERS" `Slow test_smembers;
       test_case "SPOP" `Slow test_spop;
       test_case "SRANDMEMBER" `Slow test_srandmember;
+      test_case "SREM" `Slow test_srem;
       test_case "SCAN" `Slow test_scan;
       test_case "MOVE" `Slow test_move;
       test_case "PERSIST" `Slow test_persist;
