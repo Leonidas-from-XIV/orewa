@@ -578,6 +578,20 @@ let test_sinterstore () =
   Alcotest.(check (result int err)) "The right members are in the new set" (Ok 1) res;
   return ()
 
+let test_sismember () =
+  Orewa.with_connection ~host @@ fun conn ->
+  let key = random_key () in
+  let member = "aaa" in
+  let not_member = "bbb" in
+  let%bind res = Orewa.sismember conn ~key member in
+  Alcotest.(check (result bool err)) "Not member in inexistent set" (Ok false) res;
+  let%bind _ = Orewa.sadd conn ~key member in
+  let%bind res = Orewa.sismember conn ~key member in
+  Alcotest.(check (result bool err)) "Member in set" (Ok true) res;
+  let%bind res = Orewa.sismember conn ~key not_member in
+  Alcotest.(check (result bool err)) "Not member in set" (Ok false) res;
+  return ()
+
 let test_scan () =
   Orewa.with_connection ~host @@ fun conn ->
   let prefix = random_key () in
@@ -873,6 +887,7 @@ let tests =
       test_case "SDIFFSTORE" `Slow test_sdiffstore;
       test_case "SINTER" `Slow test_sinter;
       test_case "SINTERSTORE" `Slow test_sinterstore;
+      test_case "SISMEMBER" `Slow test_sismember;
       test_case "SCAN" `Slow test_scan;
       test_case "MOVE" `Slow test_move;
       test_case "PERSIST" `Slow test_persist;

@@ -477,6 +477,13 @@ let sinterstore t ~destination ?(keys = []) ~key =
   | Resp.Integer n -> return n
   | _ -> Deferred.return @@ Error `Unexpected
 
+let sismember t ~key member =
+  let open Deferred.Result.Let_syntax in
+  match%bind request t ["SISMEMBER"; key; member] with
+  | Resp.Integer 0 -> return false
+  | Resp.Integer 1 -> return true
+  | _ -> Deferred.return @@ Error `Unexpected
+
 let scan ?pattern ?count t =
   let pattern =
     match pattern with

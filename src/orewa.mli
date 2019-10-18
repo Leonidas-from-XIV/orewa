@@ -191,6 +191,8 @@ val sinterstore
   key:string ->
   (int, [> common_error]) Deferred.Result.t
 
+val sismember : t -> key:string -> string -> (bool, [> common_error]) Deferred.Result.t
+
 val move : t -> string -> int -> (bool, [> common_error]) Deferred.Result.t
 
 val persist : t -> string -> (bool, [> common_error]) Deferred.Result.t
