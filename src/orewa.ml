@@ -551,7 +551,7 @@ let sunionstore t ~destination ?(keys = []) ~key =
   | Resp.Integer n -> return n
   | _ -> Deferred.return @@ Error `Unexpected
 
-let scan ?pattern ?count t =
+let scan_generic t ?pattern ?count over =
   let pattern =
     match pattern with
     | Some pattern -> ["MATCH"; pattern]
@@ -564,7 +564,7 @@ let scan ?pattern ?count t =
   in
   Pipe.create_reader ~close_on_exception:false @@ fun writer ->
   Deferred.repeat_until_finished "0" @@ fun cursor ->
-  match%bind request t (["SCAN"; cursor] @ pattern @ count) with
+  match%bind request t (over @ [cursor] @ pattern @ count) with
   | Ok (Resp.Array [Resp.Bulk cursor; Resp.Array from]) -> (
       let from =
         from
@@ -578,6 +578,10 @@ let scan ?pattern ?count t =
       | "0" -> return @@ `Finished ()
       | cursor -> return @@ `Repeat cursor )
   | _ -> failwith "unexpected"
+
+let scan ?pattern ?count t = scan_generic t ?pattern ?count ["SCAN"]
+
+let sscan t ?pattern ?count key = scan_generic t ?pattern ?count ["SSCAN"; key]
 
 let move t key db =
   let open Deferred.Result.Let_syntax in

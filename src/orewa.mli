@@ -230,6 +230,8 @@ val sunionstore
   key:string ->
   (int, [> common_error]) Deferred.Result.t
 
+val sscan : t -> ?pattern:string -> ?count:int -> string -> string Pipe.Reader.t
+
 val move : t -> string -> int -> (bool, [> common_error]) Deferred.Result.t
 
 val persist : t -> string -> (bool, [> common_error]) Deferred.Result.t

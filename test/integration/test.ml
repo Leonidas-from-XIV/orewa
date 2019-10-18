@@ -704,6 +704,22 @@ let test_sunionstore () =
   Alcotest.(check (result int err)) "The right members are in the new set" (Ok 5) res;
   return ()
 
+let test_sscan () =
+  Orewa.with_connection ~host @@ fun conn ->
+  let key = random_key () in
+  print_endline key;
+  let count = 20 in
+  let members =
+    List.init count ~f:(fun i -> String.concat ~sep:":" ["mem"; string_of_int i])
+  in
+  let%bind _ = Orewa.sadd conn ~key "dummy" ~members in
+  let pattern = "mem:*" in
+  let pipe = Orewa.sscan conn ~pattern ~count:4 key in
+  let%bind q = Pipe.read_all pipe in
+  let res = Queue.to_list q in
+  Alcotest.(check unordered_string_list) "Returns the right keys" members res;
+  return ()
+
 let test_scan () =
   Orewa.with_connection ~host @@ fun conn ->
   let prefix = random_key () in
@@ -1006,6 +1022,7 @@ let tests =
       test_case "SREM" `Slow test_srem;
       test_case "SUNION" `Slow test_sunion;
       test_case "SUNIONSTORE" `Slow test_sunionstore;
+      test_case "SSCAN" `Slow test_sscan;
       test_case "SCAN" `Slow test_scan;
       test_case "MOVE" `Slow test_move;
       test_case "PERSIST" `Slow test_persist;
