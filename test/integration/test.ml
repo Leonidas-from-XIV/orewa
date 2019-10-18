@@ -562,6 +562,22 @@ let test_sinter () =
   Alcotest.(check (result (list string) err)) "Correct differing set" (Ok ["c"]) res;
   return ()
 
+let test_sinterstore () =
+  Orewa.with_connection ~host @@ fun conn ->
+  let key1 = random_key () in
+  let key2 = random_key () in
+  let destination = random_key () in
+  let%bind _ = Orewa.sadd conn ~key:key1 "a" ~members:["b"; "c"] in
+  let%bind _ = Orewa.sadd conn ~key:key2 "c" ~members:["d"; "e"] in
+  let%bind res = Orewa.sinterstore conn ~destination ~key:key1 ~keys:[key2] in
+  Alcotest.(check (result int err))
+    "The right amount of members was calculated"
+    (Ok 1)
+    res;
+  let%bind res = Orewa.scard conn destination in
+  Alcotest.(check (result int err)) "The right members are in the new set" (Ok 1) res;
+  return ()
+
 let test_scan () =
   Orewa.with_connection ~host @@ fun conn ->
   let prefix = random_key () in
@@ -856,6 +872,7 @@ let tests =
       test_case "SDIFF" `Slow test_sdiff;
       test_case "SDIFFSTORE" `Slow test_sdiffstore;
       test_case "SINTER" `Slow test_sinter;
+      test_case "SINTERSTORE" `Slow test_sinterstore;
       test_case "SCAN" `Slow test_scan;
       test_case "MOVE" `Slow test_move;
       test_case "PERSIST" `Slow test_persist;
