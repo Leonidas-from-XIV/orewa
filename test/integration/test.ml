@@ -517,6 +517,20 @@ let test_sadd () =
   Alcotest.(check (result int err)) "Skips multiple duplicate value" (Ok 1) res;
   return ()
 
+let test_scard () =
+  Orewa.with_connection ~host @@ fun conn ->
+  let key = random_key () in
+  let dup = "dup" in
+  let%bind res = Orewa.scard conn key in
+  Alcotest.(check (result int err)) "Nonexistant key is empty" (Ok 0) res;
+  let%bind _ = Orewa.sadd conn ~key dup in
+  let%bind res = Orewa.scard conn key in
+  Alcotest.(check (result int err)) "Existent set has one member" (Ok 1) res;
+  let%bind _ = Orewa.sadd conn ~key "a" ~members:["b"; "c"] in
+  let%bind res = Orewa.scard conn key in
+  Alcotest.(check (result int err)) "New set has even more members" (Ok 4) res;
+  return ()
+
 let test_scan () =
   Orewa.with_connection ~host @@ fun conn ->
   let prefix = random_key () in
@@ -807,6 +821,7 @@ let tests =
       test_case "EXPIREAT" `Slow test_expireat;
       test_case "KEYS" `Slow test_keys;
       test_case "SADD" `Slow test_sadd;
+      test_case "SCARD" `Slow test_scard;
       test_case "SCAN" `Slow test_scan;
       test_case "MOVE" `Slow test_move;
       test_case "PERSIST" `Slow test_persist;

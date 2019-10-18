@@ -435,6 +435,12 @@ let sadd t ~key ?(members = []) member =
   | Resp.Integer n -> return n
   | _ -> Deferred.return @@ Error `Unexpected
 
+let scard t key =
+  let open Deferred.Result.Let_syntax in
+  match%bind request t ["SCARD"; key] with
+  | Resp.Integer n -> return n
+  | _ -> Deferred.return @@ Error `Unexpected
+
 let scan ?pattern ?count t =
   let pattern =
     match pattern with

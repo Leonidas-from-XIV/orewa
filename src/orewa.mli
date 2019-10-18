@@ -163,6 +163,8 @@ val sadd
 
 val scan : ?pattern:string -> ?count:int -> t -> string Pipe.Reader.t
 
+val scard : t -> string -> (int, [> common_error]) Deferred.Result.t
+
 val move : t -> string -> int -> (bool, [> common_error]) Deferred.Result.t
 
 val persist : t -> string -> (bool, [> common_error]) Deferred.Result.t
