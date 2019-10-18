@@ -677,6 +677,17 @@ let test_srem () =
   Alcotest.(check (result int err)) "Set is empty now" (Ok 0) res;
   return ()
 
+let test_sunion () =
+  Orewa.with_connection ~host @@ fun conn ->
+  let key1 = random_key () in
+  let key2 = random_key () in
+  let%bind _ = Orewa.sadd conn ~key:key1 "a" ~members:["b"; "c"] in
+  let%bind _ = Orewa.sadd conn ~key:key2 "c" ~members:["d"; "e"] in
+  let%bind res = Orewa.sunion conn key1 ~keys:[key2] in
+  let length = Result.map ~f:List.length in
+  Alcotest.(check (result int err)) "Correct differing set" (Ok 5) (length res);
+  return ()
+
 let test_scan () =
   Orewa.with_connection ~host @@ fun conn ->
   let prefix = random_key () in
@@ -977,6 +988,7 @@ let tests =
       test_case "SPOP" `Slow test_spop;
       test_case "SRANDMEMBER" `Slow test_srandmember;
       test_case "SREM" `Slow test_srem;
+      test_case "SUNION" `Slow test_sunion;
       test_case "SCAN" `Slow test_scan;
       test_case "MOVE" `Slow test_move;
       test_case "PERSIST" `Slow test_persist;

@@ -533,6 +533,18 @@ let srem t ~key ?(members = []) member =
   | Resp.Integer n -> return n
   | _ -> Deferred.return @@ Error `Unexpected
 
+let sunion t ?(keys = []) key =
+  let open Deferred.Result.Let_syntax in
+  match%bind request t ("SUNION" :: key :: keys) with
+  | Resp.Array res ->
+      res
+      |> List.map ~f:(function
+             | Resp.Bulk v -> Ok v
+             | _ -> Error `Unexpected )
+      |> Result.all
+      |> Deferred.return
+  | _ -> Deferred.return @@ Error `Unexpected
+
 let scan ?pattern ?count t =
   let pattern =
     match pattern with
