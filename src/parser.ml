@@ -35,7 +35,7 @@ let rec read_resp reader =
       | len ->
           let%bind data = read_bulk ~len reader in
           let%bind () = flush_line reader in
-          return (Resp.Bulk data) )
+          return (Resp.Bulk data))
   | '*' ->
       let%bind length = read_int reader in
       let rec inner acc = function
