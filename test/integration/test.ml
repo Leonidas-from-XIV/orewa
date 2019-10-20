@@ -355,8 +355,10 @@ let test_bitfield () =
       conn
       key
       ~overflow:Orewa.Wrap
-      [ Set (intsize, Relative 0, maxsize);
-        Incrby (intsize, Relative 0, Int.succ overflow_by) ]
+      [
+        Set (intsize, Relative 0, maxsize);
+        Incrby (intsize, Relative 0, Int.succ overflow_by);
+      ]
   in
   Alcotest.(check ile)
     "Relative setting and overflow work"
@@ -982,7 +984,8 @@ let test_close () =
 
 let tests =
   Alcotest_async.
-    [ test_case "ECHO" `Slow test_echo;
+    [
+      test_case "ECHO" `Slow test_echo;
       test_case "SET" `Slow test_set;
       test_case "GET" `Slow test_get;
       test_case "MGET" `Slow test_mget;
@@ -1043,7 +1046,8 @@ let tests =
       test_case "DUMP" `Slow test_dump;
       test_case "RESTORE" `Slow test_restore;
       test_case "PIPELINE" `Slow test_pipelining;
-      test_case "CLOSE" `Slow test_close ]
+      test_case "CLOSE" `Slow test_close;
+    ]
 
 let () =
   Log.Global.set_level `Debug;

@@ -31,10 +31,7 @@ type t = {
 let init reader writer =
   let waiters = Queue.create () in
   let rec recv_loop reader =
-    match%bind
-      Monitor.try_with_or_error @@ fun () ->
-      Parser.read_resp reader
-    with
+    match%bind Monitor.try_with_or_error @@ fun () -> Parser.read_resp reader with
     | Error _ | Ok (Error _) -> return ()
     | Ok (Ok r as result) -> (
       match Queue.dequeue waiters with
@@ -268,15 +265,19 @@ let bitfield t ?overflow key ops =
            | Get (size, offset) ->
                ["GET"; string_of_intsize size; string_of_offset offset]
            | Set (size, offset, value) ->
-               [ "SET";
+               [
+                 "SET";
                  string_of_intsize size;
                  string_of_offset offset;
-                 string_of_int value ]
+                 string_of_int value;
+               ]
            | Incrby (size, offset, increment) ->
-               [ "INCRBY";
+               [
+                 "INCRBY";
                  string_of_intsize size;
                  string_of_offset offset;
-                 string_of_int increment ])
+                 string_of_int increment;
+               ])
     |> List.concat
   in
   let overflow =
