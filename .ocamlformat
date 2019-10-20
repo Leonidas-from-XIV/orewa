@@ -1,6 +1,5 @@
 break-cases=toplevel
 break-infix=fit-or-vertical
-break-string-literals=wrap
 doc-comments=before
 extension-sugar=preserve
 field-space=loose
@@ -20,6 +19,7 @@ wrap-fun-args=false
 module-item-spacing=sparse
 break-separators=after-and-docked
 break-infix-before-func=false
+break-collection-expressions=fit-or-vertical
 exp-grouping=parens
 align-cases=false
 align-constructors-decl=false
