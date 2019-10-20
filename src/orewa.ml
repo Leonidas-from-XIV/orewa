@@ -12,7 +12,7 @@ type command = string list
 
 type request = {
   command : command;
-  waiter : response Ivar.t
+  waiter : response Ivar.t;
 }
 
 let construct_request commands =
@@ -25,7 +25,7 @@ type t = {
   (* Need a queue of waiter Ivars. Need some way of closing the connection *)
   waiters : response Ivar.t Queue.t;
   reader : request Pipe.Reader.t;
-  writer : request Pipe.Writer.t
+  writer : request Pipe.Writer.t;
 }
 
 let init reader writer =
@@ -37,7 +37,7 @@ let init reader writer =
       match Queue.dequeue waiters with
       | None when Reader.is_closed reader -> return ()
       | None -> failwithf "No waiters are waiting for this message: %s" (Resp.show r) ()
-      | Some waiter -> Ivar.fill waiter result; recv_loop reader )
+      | Some waiter -> Ivar.fill waiter result; recv_loop reader)
   in
   (* Requests are posted to a pipe, and requests are processed in sequence *)
   let request_reader, request_writer = Pipe.create () in
@@ -82,7 +82,7 @@ let request t command =
       match%map Ivar.read waiter with
       | Ok _ as res -> res
       | Error `Connection_closed -> Error `Connection_closed
-      | Error `Unexpected -> Error `Unexpected )
+      | Error `Unexpected -> Error `Unexpected)
 
 let echo t message =
   let open Deferred.Result.Let_syntax in
@@ -152,7 +152,7 @@ let mget t keys =
                match item with
                | Resp.Null -> Ok (None :: acc)
                | Resp.Bulk s -> Ok (Some s :: acc)
-               | _ -> Error `Unexpected ) )
+               | _ -> Error `Unexpected))
       |> Deferred.return
   | _ -> Deferred.return @@ Error `Unexpected
 
@@ -183,7 +183,7 @@ let lrange t ~key ~start ~stop =
   | Resp.Array xs ->
       List.map xs ~f:(function
           | Resp.Bulk v -> Ok v
-          | _ -> Error `Unexpected )
+          | _ -> Error `Unexpected)
       |> Result.all
       |> Deferred.return
   | _ -> Deferred.return @@ Error `Unexpected
@@ -265,15 +265,19 @@ let bitfield t ?overflow key ops =
            | Get (size, offset) ->
                ["GET"; string_of_intsize size; string_of_offset offset]
            | Set (size, offset, value) ->
-               [ "SET";
+               [
+                 "SET";
                  string_of_intsize size;
                  string_of_offset offset;
-                 string_of_int value ]
+                 string_of_int value;
+               ]
            | Incrby (size, offset, increment) ->
-               [ "INCRBY";
+               [
+                 "INCRBY";
                  string_of_intsize size;
                  string_of_offset offset;
-                 string_of_int increment ] )
+                 string_of_int increment;
+               ])
     |> List.concat
   in
   let overflow =
@@ -290,7 +294,7 @@ let bitfield t ?overflow key ops =
              | Error _, _ -> acc
              | Ok acc, Resp.Integer i -> Ok (Some i :: acc)
              | Ok acc, Resp.Null -> Ok (None :: acc)
-             | Ok _, _ -> Error `Unexpected )
+             | Ok _, _ -> Error `Unexpected)
       >>| List.rev
       |> Deferred.return
   | _ -> Deferred.return @@ Error `Unexpected
@@ -422,7 +426,7 @@ let coerce_bulk_array xs =
   xs
   |> List.map ~f:(function
          | Resp.Bulk key -> Ok key
-         | _ -> Error `Unexpected )
+         | _ -> Error `Unexpected)
   |> Result.all
 
 let keys t pattern =
@@ -524,13 +528,13 @@ let generic_scan t ?pattern ?count over =
         from
         |> List.map ~f:(function
                | Resp.Bulk s -> s
-               | _ -> failwith "unexpected" )
+               | _ -> failwith "unexpected")
         |> Queue.of_list
       in
       let%bind () = Pipe.transfer_in writer ~from in
       match cursor with
       | "0" -> return @@ `Finished ()
-      | cursor -> return @@ `Repeat cursor )
+      | cursor -> return @@ `Repeat cursor)
   | _ -> failwith "unexpected"
 
 let scan ?pattern ?count t = generic_scan t ?pattern ?count ["SCAN"]
@@ -616,7 +620,7 @@ let sort t ?by ?limit ?get ?order ?alpha ?store key =
       sorted
       |> List.map ~f:(function
              | Resp.Bulk v -> Ok v
-             | _ -> Error `Unexpected )
+             | _ -> Error `Unexpected)
       |> Result.all
       |> Result.map ~f:(fun x -> `Sorted x)
       |> Deferred.return

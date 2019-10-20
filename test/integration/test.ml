@@ -39,7 +39,7 @@ let unordered_string_list =
       (fun a b ->
         let equal = equal (list string) in
         let compare = String.compare in
-        equal (List.sort ~compare a) (List.sort ~compare b) ))
+        equal (List.sort ~compare a) (List.sort ~compare b)))
 
 let truncated_string_pp formatter str =
   let str = Printf.sprintf "%s(...)" (String.prefix str 10) in
@@ -238,7 +238,7 @@ let test_large_lrange () =
   let%bind expected =
     Deferred.List.init values ~f:(fun _ ->
         let%bind _ = Orewa.lpush conn ~key value in
-        return value )
+        return value)
   in
   let%bind res = Orewa.lrange conn ~key ~start:0 ~stop:(-1) in
   Alcotest.(check (result (list truncated_string) err)) "LRANGE failed" (Ok expected) res;
@@ -355,8 +355,10 @@ let test_bitfield () =
       conn
       key
       ~overflow:Orewa.Wrap
-      [ Set (intsize, Relative 0, maxsize);
-        Incrby (intsize, Relative 0, Int.succ overflow_by) ]
+      [
+        Set (intsize, Relative 0, maxsize);
+        Incrby (intsize, Relative 0, Int.succ overflow_by);
+      ]
   in
   Alcotest.(check ile)
     "Relative setting and overflow work"
@@ -737,7 +739,7 @@ let test_scan () =
     Deferred.List.map (List.range 0 count) ~f:(fun index ->
         let key = Printf.sprintf "%s:%d" prefix index in
         let%bind _ = Orewa.set conn ~key value in
-        return key )
+        return key)
   in
   let pattern = prefix ^ "*" in
   let pipe = Orewa.scan ~pattern ~count:4 conn in
@@ -826,7 +828,7 @@ let test_sort () =
   let%bind () =
     Deferred.List.iter randomly_ordered ~f:(fun value ->
         let%bind _ = Orewa.lpush conn ~key (string_of_int value) in
-        return () )
+        return ())
   in
   let%bind res = Orewa.sort conn key in
   let sort_result =
@@ -837,7 +839,7 @@ let test_sort () =
           | `Count n -> Printf.sprintf "`Count %d" n
           | `Sorted xs -> Fmt.strf "`Sorted %a" Fmt.(list string) xs
         in
-        Format.pp_print_text formatter v )
+        Format.pp_print_text formatter v)
       (fun a b -> a = b)
   in
   let integer_sorted =
@@ -889,7 +891,7 @@ let test_ttl () =
   let%bind _ = Orewa.set conn ~expire ~key "aaaa" in
   let subspan =
     Alcotest.testable Time.Span.pp (fun a b ->
-        Time.Span.(a <= expire) && Time.Span.(b <= expire) )
+        Time.Span.(a <= expire) && Time.Span.(b <= expire))
   in
   let%bind res = Orewa.ttl conn key in
   Alcotest.(check (result subspan err)) "TTL not larger than before" (Ok expire) res;
@@ -955,7 +957,7 @@ let test_pipelining () =
     Deferred.Array.iteri ~how:`Sequential keys ~f:(fun i key ->
         let%bind res = Orewa.set conn ~key (string_of_int i) in
         Alcotest.(check be) "Set test key" (Ok true) res;
-        return () )
+        return ())
   in
   let%bind () =
     Deferred.Array.iteri
@@ -963,7 +965,7 @@ let test_pipelining () =
       ~f:(fun i key ->
         let%bind res = Orewa.get conn key in
         Alcotest.(check soe) "Wrong value for key" (Ok (Some (string_of_int i))) res;
-        return () )
+        return ())
       keys
   in
   return ()
@@ -982,7 +984,8 @@ let test_close () =
 
 let tests =
   Alcotest_async.
-    [ test_case "ECHO" `Slow test_echo;
+    [
+      test_case "ECHO" `Slow test_echo;
       test_case "SET" `Slow test_set;
       test_case "GET" `Slow test_get;
       test_case "MGET" `Slow test_mget;
@@ -1043,7 +1046,8 @@ let tests =
       test_case "DUMP" `Slow test_dump;
       test_case "RESTORE" `Slow test_restore;
       test_case "PIPELINE" `Slow test_pipelining;
-      test_case "CLOSE" `Slow test_close ]
+      test_case "CLOSE" `Slow test_close;
+    ]
 
 let () =
   Log.Global.set_level `Debug;
