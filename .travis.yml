@@ -16,4 +16,4 @@ env:
     - OCAML_VERSION=4.06
     - OCAML_VERSION=4.07
     - OCAML_VERSION=4.08
-    - OCAML_VERSION=4.09 EXTRA_DEPS="ocamlformat.0.11.0" PRE_INSTALL_HOOK="make format"
+    - OCAML_VERSION=4.09 EXTRA_DEPS="ocamlformat.0.12" PRE_INSTALL_HOOK="make format"

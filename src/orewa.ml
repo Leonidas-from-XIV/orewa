@@ -10,10 +10,9 @@ type response = (Resp.t, common_error) result
 
 type command = string list
 
-type request = {
-  command : command;
-  waiter : response Ivar.t;
-}
+type request =
+  { command : command;
+    waiter : response Ivar.t }
 
 let construct_request commands =
   commands
@@ -21,12 +20,11 @@ let construct_request commands =
   |> (fun xs -> Resp.Array xs)
   |> Resp.encode
 
-type t = {
-  (* Need a queue of waiter Ivars. Need some way of closing the connection *)
-  waiters : response Ivar.t Queue.t;
-  reader : request Pipe.Reader.t;
-  writer : request Pipe.Writer.t;
-}
+type t =
+  { (* Need a queue of waiter Ivars. Need some way of closing the connection *)
+    waiters : response Ivar.t Queue.t;
+    reader : request Pipe.Reader.t;
+    writer : request Pipe.Writer.t }
 
 let init reader writer =
   let waiters = Queue.create () in
@@ -34,10 +32,12 @@ let init reader writer =
     match%bind Monitor.try_with_or_error @@ fun () -> Parser.read_resp reader with
     | Error _ | Ok (Error _) -> return ()
     | Ok (Ok r as result) -> (
-      match Queue.dequeue waiters with
-      | None when Reader.is_closed reader -> return ()
-      | None -> failwithf "No waiters are waiting for this message: %s" (Resp.show r) ()
-      | Some waiter -> Ivar.fill waiter result; recv_loop reader)
+        match Queue.dequeue waiters with
+        | None when Reader.is_closed reader -> return ()
+        | None -> failwithf "No waiters are waiting for this message: %s" (Resp.show r) ()
+        | Some waiter ->
+            Ivar.fill waiter result;
+            recv_loop reader)
   in
   (* Requests are posted to a pipe, and requests are processed in sequence *)
   let request_reader, request_writer = Pipe.create () in
@@ -64,9 +64,7 @@ let init reader writer =
   {waiters; reader = request_reader; writer = request_writer}
 
 let connect ?(port = 6379) ~host =
-  let where =
-    Tcp.Where_to_connect.of_host_and_port @@ Host_and_port.create ~host ~port
-  in
+  let where = Tcp.Where_to_connect.of_host_and_port @@ Host_and_port.create ~host ~port in
   let%bind _socket, reader, writer = Tcp.connect where in
   return @@ init reader writer
 
@@ -149,10 +147,10 @@ let mget t keys =
              match acc with
              | Error _ -> acc
              | Ok acc -> (
-               match item with
-               | Resp.Null -> Ok (None :: acc)
-               | Resp.Bulk s -> Ok (Some s :: acc)
-               | _ -> Error `Unexpected))
+                 match item with
+                 | Resp.Null -> Ok (None :: acc)
+                 | Resp.Bulk s -> Ok (Some s :: acc)
+                 | _ -> Error `Unexpected))
       |> Deferred.return
   | _ -> Deferred.return @@ Error `Unexpected
 
@@ -262,22 +260,17 @@ let bitfield t ?overflow key ops =
   let ops =
     ops
     |> List.map ~f:(function
-           | Get (size, offset) ->
-               ["GET"; string_of_intsize size; string_of_offset offset]
+           | Get (size, offset) -> ["GET"; string_of_intsize size; string_of_offset offset]
            | Set (size, offset, value) ->
-               [
-                 "SET";
+               [ "SET";
                  string_of_intsize size;
                  string_of_offset offset;
-                 string_of_int value;
-               ]
+                 string_of_int value ]
            | Incrby (size, offset, increment) ->
-               [
-                 "INCRBY";
+               [ "INCRBY";
                  string_of_intsize size;
                  string_of_offset offset;
-                 string_of_int increment;
-               ])
+                 string_of_int increment ])
     |> List.concat
   in
   let overflow =
@@ -665,9 +658,7 @@ let restore t ~key ?ttl ?replace value =
   | _ -> Deferred.return @@ Error `Unexpected
 
 let with_connection ?(port = 6379) ~host f =
-  let where =
-    Tcp.Where_to_connect.of_host_and_port @@ Host_and_port.create ~host ~port
-  in
+  let where = Tcp.Where_to_connect.of_host_and_port @@ Host_and_port.create ~host ~port in
   Tcp.with_connection where @@ fun _socket reader writer ->
   let t = init reader writer in
   f t

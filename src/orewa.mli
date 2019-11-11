@@ -142,11 +142,7 @@ val select : t -> int -> (unit, [> common_error]) Deferred.Result.t
 
 val del : t -> ?keys:string list -> string -> (int, [> common_error]) Deferred.Result.t
 
-val exists
-  :  t ->
-  ?keys:string list ->
-  string ->
-  (int, [> common_error]) Deferred.Result.t
+val exists : t -> ?keys:string list -> string -> (int, [> common_error]) Deferred.Result.t
 
 val expire : t -> string -> Time.Span.t -> (int, [> common_error]) Deferred.Result.t
 

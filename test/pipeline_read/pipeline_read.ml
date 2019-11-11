@@ -8,7 +8,9 @@ let key = "testkey1"
 let rec req conn =
   match%bind Orewa.get conn key with
   | Ok _ -> req conn
-  | Error _ -> eprintf "Done\n%!"; return ()
+  | Error _ ->
+      eprintf "Done\n%!";
+      return ()
 
 let main () =
   let%bind conn = Orewa.connect ?port:None ~host in
