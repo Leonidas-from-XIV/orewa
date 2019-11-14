@@ -173,9 +173,14 @@ let msetnx t alist =
 
 let is_wrong_type msg = String.is_prefix msg ~prefix:"WRONGTYPE"
 
-let lpush t ~element ?(elements = []) key =
+let lpush t ?(exist = `Always) ~element ?(elements = []) key =
   let open Deferred.Result.Let_syntax in
-  match%bind request t (["LPUSH"; key; element] @ elements) with
+  let command =
+    match exist with
+    | `Always -> "LPUSH"
+    | `Only_if_exists -> "LPUSHX"
+  in
+  match%bind request t ([command; key; element] @ elements) with
   | Resp.Integer n -> return n
   | Resp.Error e when is_wrong_type e -> Deferred.return (Error (`Wrong_type key))
   | _ -> Deferred.return @@ Error `Unexpected

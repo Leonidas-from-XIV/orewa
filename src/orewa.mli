@@ -50,6 +50,7 @@ val msetnx : t -> (string * string) list -> (bool, [> common_error]) Deferred.Re
 
 val lpush
   :  t ->
+  ?exist:[`Always | `Only_if_exists] ->
   element:string ->
   ?elements:string list ->
   string ->

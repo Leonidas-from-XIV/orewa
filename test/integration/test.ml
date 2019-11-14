@@ -211,8 +211,12 @@ let test_lpush () =
   let key = random_key () in
   let not_list = random_key () in
   let element = "value" in
+  let%bind res = Orewa.lpush conn ~exist:`Only_if_exists ~element key in
+  Alcotest.(check ie) "LPUSHX to non-existing list" (Ok 0) res;
   let%bind res = Orewa.lpush conn ~element key in
   Alcotest.(check ie) "LPUSH to empty list" (Ok 1) res;
+  let%bind res = Orewa.lpush conn ~exist:`Always ~element key in
+  Alcotest.(check ie) "LPUSH to existing list" (Ok 2) res;
   let%bind _ = Orewa.set conn ~key:not_list element in
   let%bind res = Orewa.lpush conn ~element not_list in
   Alcotest.(check ie) "LPUSH to not a list" (Error (`Wrong_type not_list)) res;
