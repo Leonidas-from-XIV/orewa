@@ -209,9 +209,13 @@ let test_large_set_get () =
 let test_lpush () =
   Orewa.with_connection ~host @@ fun conn ->
   let key = random_key () in
+  let not_list = random_key () in
   let element = "value" in
   let%bind res = Orewa.lpush conn ~element key in
-  Alcotest.(check ie) "LPUSH did not work" (Ok 1) res;
+  Alcotest.(check ie) "LPUSH to empty list" (Ok 1) res;
+  let%bind _ = Orewa.set conn ~key:not_list element in
+  let%bind res = Orewa.lpush conn ~element not_list in
+  Alcotest.(check ie) "LPUSH to not a list" (Error (`Wrong_type not_list)) res;
   return ()
 
 let test_lpush_lrange () =

@@ -171,10 +171,13 @@ let msetnx t alist =
   | Resp.Integer 0 -> return false
   | _ -> Deferred.return @@ Error `Unexpected
 
+let is_wrong_type msg = String.is_prefix msg ~prefix:"WRONGTYPE"
+
 let lpush t ~element ?(elements = []) key =
   let open Deferred.Result.Let_syntax in
   match%bind request t (["LPUSH"; key; element] @ elements) with
   | Resp.Integer n -> return n
+  | Resp.Error e when is_wrong_type e -> Deferred.return (Error (`Wrong_type key))
   | _ -> Deferred.return @@ Error `Unexpected
 
 let lrange t ~key ~start ~stop =
@@ -685,8 +688,6 @@ let llen t key =
   match%bind request t ["LLEN"; key] with
   | Resp.Integer n -> return n
   | _ -> Deferred.return @@ Error `Unexpected
-
-let is_wrong_type msg = String.is_prefix msg ~prefix:"WRONGTYPE"
 
 let lpop t key =
   let open Deferred.Result.Let_syntax in

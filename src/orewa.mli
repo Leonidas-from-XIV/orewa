@@ -53,7 +53,7 @@ val lpush
   element:string ->
   ?elements:string list ->
   string ->
-  (int, [> common_error]) Deferred.Result.t
+  (int, [> common_error | wrong_type]) Deferred.Result.t
 
 val lpop : t -> string -> (string option, [> common_error | wrong_type]) Deferred.Result.t
 
