@@ -46,7 +46,12 @@ val mset : t -> (string * string) list -> (unit, [> common_error]) Deferred.Resu
 
 val msetnx : t -> (string * string) list -> (bool, [> common_error]) Deferred.Result.t
 
-val lpush : t -> key:string -> string -> (int, [> common_error]) Deferred.Result.t
+val lpush
+  :  t ->
+  element:string ->
+  ?elements:string list ->
+  string ->
+  (int, [> common_error]) Deferred.Result.t
 
 val lrange
   :  t ->

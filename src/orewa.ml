@@ -169,9 +169,9 @@ let msetnx t alist =
   | Resp.Integer 0 -> return false
   | _ -> Deferred.return @@ Error `Unexpected
 
-let lpush t ~key value =
+let lpush t ~element ?(elements = []) key =
   let open Deferred.Result.Let_syntax in
-  match%bind request t ["LPUSH"; key; value] with
+  match%bind request t (["LPUSH"; key; element] @ elements) with
   | Resp.Integer n -> return n
   | _ -> Deferred.return @@ Error `Unexpected
 
