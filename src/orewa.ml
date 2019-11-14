@@ -664,6 +664,20 @@ let lindex t key index =
   | Resp.Null -> return None
   | _ -> Deferred.return @@ Error `Unexpected
 
+type position =
+  | Before
+  | After
+
+let string_of_position = function
+  | Before -> "BEFORE"
+  | After -> "AFTER"
+
+let linsert t ~key position ~element ~pivot =
+  let open Deferred.Result.Let_syntax in
+  match%bind request t ["LINSERT"; key; string_of_position position; pivot; element] with
+  | Resp.Integer n -> return n
+  | _ -> Deferred.return @@ Error `Unexpected
+
 let with_connection ?(port = 6379) ~host f =
   let where = Tcp.Where_to_connect.of_host_and_port @@ Host_and_port.create ~host ~port in
   Tcp.with_connection where @@ fun _socket reader writer ->

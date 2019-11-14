@@ -274,6 +274,18 @@ val restore
 
 val lindex : t -> string -> int -> (string option, [> common_error]) Deferred.Result.t
 
+type position =
+  | Before
+  | After
+
+val linsert
+  :  t ->
+  key:string ->
+  position ->
+  element:string ->
+  pivot:string ->
+  (int, [> common_error]) Deferred.Result.t
+
 val connect : ?port:int -> host:string -> t Deferred.t
 
 val close : t -> unit Deferred.t

@@ -978,7 +978,7 @@ let test_close () =
   return ()
 
 let test_lindex () =
-  let%bind conn = Orewa.connect ?port:None ~host in
+  Orewa.with_connection ~host @@ fun conn ->
   let key = random_key () in
   let%bind res = Orewa.lindex conn key 0 in
   Alcotest.(check soe) "Get index of not existing list" (Ok None) res;
@@ -986,6 +986,13 @@ let test_lindex () =
   let%bind _ = Orewa.set conn ~key:not_list "this is not a list" in
   let%bind res = Orewa.lindex conn key 0 in
   Alcotest.(check soe) "Get index of not a list" (Ok None) res;
+  return ()
+
+let test_linsert () =
+  Orewa.with_connection ~host @@ fun conn ->
+  let key = random_key () in
+  let%bind res = Orewa.linsert conn ~key Orewa.Before ~element:"Hello" ~pivot:"World" in
+  Alcotest.(check ie) "Insert into nonexisting list" (Ok 0) res;
   return ()
 
 let tests =
@@ -1052,6 +1059,7 @@ let tests =
       test_case "RESTORE" `Slow test_restore;
       test_case "PIPELINE" `Slow test_pipelining;
       test_case "CLOSE" `Slow test_close;
+      test_case "LINSERT" `Slow test_linsert;
       test_case "LINDEX" `Slow test_lindex ]
 
 let () =
