@@ -1042,6 +1042,27 @@ let test_lpop () =
   Alcotest.(check soe) "Pop from existing list" (Ok (Some element)) res;
   return ()
 
+let test_lrem () =
+  Orewa.with_connection ~host @@ fun conn ->
+  let key = random_key () in
+  let element = random_key () in
+  let%bind _ = Orewa.lpush conn key ~element in
+  let%bind _ = Orewa.lpush conn key ~element in
+  let%bind _ = Orewa.lpush conn key ~element:"SPACER" in
+  let%bind _ = Orewa.lpush conn key ~element in
+  let%bind _ = Orewa.lpush conn key ~element in
+  let%bind res = Orewa.lrem conn ~key 1 ~element in
+  Alcotest.(check ie) "Removing first occurence" (Ok 1) res;
+  let%bind res = Orewa.lrem conn ~key 1 ~element in
+  Alcotest.(check ie) "Removing second occurence" (Ok 1) res;
+  let%bind res = Orewa.lrem conn ~key (-2) ~element in
+  Alcotest.(check ie) "Removing final two occurence" (Ok 2) res;
+  let%bind res = Orewa.llen conn key in
+  Alcotest.(check ie) "Removing final two occurence" (Ok 1) res;
+  let%bind res = Orewa.lrem conn ~key 1 ~element in
+  Alcotest.(check ie) "Trying to remove not existing element" (Ok 0) res;
+  return ()
+
 let tests =
   Alcotest_async.
     [ test_case "ECHO" `Slow test_echo;
@@ -1056,6 +1077,7 @@ let tests =
       test_case "LPUSH" `Slow test_lpush;
       test_case "LPOP" `Slow test_lpop;
       test_case "LRANGE" `Slow test_lpush_lrange;
+      test_case "LREM" `Slow test_lrem;
       test_case "Large LRANGE" `Slow test_large_lrange;
       test_case "APPEND" `Slow test_append;
       test_case "AUTH" `Slow test_auth;

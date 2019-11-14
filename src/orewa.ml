@@ -191,6 +191,12 @@ let lrange t ~key ~start ~stop =
       |> Deferred.return
   | _ -> Deferred.return @@ Error `Unexpected
 
+let lrem t ~key count ~element =
+  let open Deferred.Result.Let_syntax in
+  match%bind request t ["LREM"; key; string_of_int count; element] with
+  | Resp.Integer n -> return n
+  | _ -> Deferred.return @@ Error `Unexpected
+
 let append t ~key value =
   let open Deferred.Result.Let_syntax in
   match%bind request t ["APPEND"; key; value] with

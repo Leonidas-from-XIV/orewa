@@ -293,6 +293,13 @@ val linsert
 
 val llen : t -> string -> (int, [> common_error]) Deferred.Result.t
 
+val lrem
+  :  t ->
+  key:string ->
+  int ->
+  element:string ->
+  (int, [> common_error]) Deferred.Result.t
+
 val connect : ?port:int -> host:string -> t Deferred.t
 
 val close : t -> unit Deferred.t
