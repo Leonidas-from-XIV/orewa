@@ -1080,6 +1080,20 @@ let test_lset () =
     res;
   return ()
 
+let test_ltrim () =
+  Orewa.with_connection ~host @@ fun conn ->
+  let key = random_key () in
+  let element = random_key () in
+  let elements = 10 in
+  let%bind _ =
+    List.init elements ~f:(fun _ -> Orewa.lpush conn key ~element) |> Deferred.all
+  in
+  let%bind res = Orewa.ltrim conn ~start:0 ~end':4 key in
+  Alcotest.(check ue) "Trimming list" (Ok ()) res;
+  let%bind res = Orewa.llen conn key in
+  Alcotest.(check ie) "List is trimmed" (Ok 5) res;
+  return ()
+
 let tests =
   Alcotest_async.
     [ test_case "ECHO" `Slow test_echo;
@@ -1096,6 +1110,7 @@ let tests =
       test_case "LRANGE" `Slow test_lpush_lrange;
       test_case "LREM" `Slow test_lrem;
       test_case "LSET" `Slow test_lset;
+      test_case "LTRIM" `Slow test_ltrim;
       test_case "Large LRANGE" `Slow test_large_lrange;
       test_case "APPEND" `Slow test_append;
       test_case "AUTH" `Slow test_auth;

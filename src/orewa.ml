@@ -206,6 +206,12 @@ let lset t ~key index ~element =
       Deferred.return @@ Error (`Index_out_of_range key)
   | _ -> Deferred.return @@ Error `Unexpected
 
+let ltrim t ~start ~end' key =
+  let open Deferred.Result.Let_syntax in
+  match%bind request t ["LTRIM"; key; string_of_int start; string_of_int end'] with
+  | Resp.String "OK" -> return ()
+  | _ -> Deferred.return @@ Error `Unexpected
+
 let append t ~key value =
   let open Deferred.Result.Let_syntax in
   match%bind request t ["APPEND"; key; value] with

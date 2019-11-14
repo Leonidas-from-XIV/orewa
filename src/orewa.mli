@@ -309,6 +309,13 @@ val lset
     [> common_error | `No_such_key of string | `Index_out_of_range of string] )
   Deferred.Result.t
 
+val ltrim
+  :  t ->
+  start:int ->
+  end':int ->
+  string ->
+  (unit, [> common_error]) Deferred.Result.t
+
 val connect : ?port:int -> host:string -> t Deferred.t
 
 val close : t -> unit Deferred.t
