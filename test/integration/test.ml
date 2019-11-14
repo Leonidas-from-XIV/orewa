@@ -980,26 +980,42 @@ let test_close () =
 let test_lindex () =
   Orewa.with_connection ~host @@ fun conn ->
   let key = random_key () in
+  let element = random_key () in
   let%bind res = Orewa.lindex conn key 0 in
-  Alcotest.(check soe) "Get index of not existing list" (Ok None) res;
+  Alcotest.(check soe) "Get element out of empty list" (Ok None) res;
   let not_list = random_key () in
   let%bind _ = Orewa.set conn ~key:not_list "this is not a list" in
   let%bind res = Orewa.lindex conn key 0 in
-  Alcotest.(check soe) "Get index of not a list" (Ok None) res;
+  Alcotest.(check soe) "Get first element of not a list" (Ok None) res;
+  let%bind _ = Orewa.lpush conn ~element key in
+  let%bind _ = Orewa.lpush conn ~element:(random_key ()) key in
+  let%bind res = Orewa.lindex conn key 1 in
+  Alcotest.(check soe) "Get second element of non-empty list" (Ok (Some element)) res;
   return ()
 
 let test_linsert () =
   Orewa.with_connection ~host @@ fun conn ->
   let key = random_key () in
-  let%bind res = Orewa.linsert conn ~key Orewa.Before ~element:"Hello" ~pivot:"World" in
+  let element = random_key () in
+  let pivot = random_key () in
+  let%bind res = Orewa.linsert conn ~key Orewa.Before ~element ~pivot in
   Alcotest.(check ie) "Insert into nonexisting list" (Ok 0) res;
+  let%bind _ = Orewa.lpush conn ~element:pivot key in
+  let%bind res = Orewa.linsert conn ~key Orewa.Before ~element ~pivot in
+  Alcotest.(check ie) "Insert before into existing list" (Ok 2) res;
+  let%bind res = Orewa.linsert conn ~key Orewa.After ~element ~pivot in
+  Alcotest.(check ie) "Insert after into existing list" (Ok 3) res;
   return ()
 
 let test_llen () =
   Orewa.with_connection ~host @@ fun conn ->
   let key = random_key () in
+  let element = random_key () in
   let%bind res = Orewa.llen conn key in
   Alcotest.(check ie) "Lenght of nonexisting list" (Ok 0) res;
+  let%bind _ = Orewa.lpush conn ~element key in
+  let%bind res = Orewa.llen conn key in
+  Alcotest.(check ie) "Lenght of existing list" (Ok 1) res;
   return ()
 
 let tests =
