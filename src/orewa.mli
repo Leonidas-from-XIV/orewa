@@ -8,6 +8,8 @@ type common_error =
   | `Unexpected ]
 [@@deriving show, eq]
 
+type wrong_type = [`Wrong_type of string] [@@deriving show, eq]
+
 val echo : t -> string -> (string, [> common_error]) Deferred.Result.t
 
 type exist =
@@ -52,6 +54,8 @@ val lpush
   ?elements:string list ->
   string ->
   (int, [> common_error]) Deferred.Result.t
+
+val lpop : t -> string -> (string option, [> common_error | wrong_type]) Deferred.Result.t
 
 val lrange
   :  t ->

@@ -6,6 +6,8 @@ type common_error =
   | `Unexpected ]
 [@@deriving show, eq]
 
+type wrong_type = [`Wrong_type of string] [@@deriving show, eq]
+
 type response = (Resp.t, common_error) result
 
 type command = string list
@@ -682,6 +684,16 @@ let llen t key =
   let open Deferred.Result.Let_syntax in
   match%bind request t ["LLEN"; key] with
   | Resp.Integer n -> return n
+  | _ -> Deferred.return @@ Error `Unexpected
+
+let is_wrong_type msg = String.is_prefix msg ~prefix:"WRONGTYPE"
+
+let lpop t key =
+  let open Deferred.Result.Let_syntax in
+  match%bind request t ["LPOP"; key] with
+  | Resp.Bulk s -> return @@ Some s
+  | Resp.Null -> return None
+  | Resp.Error e when is_wrong_type e -> Deferred.return (Error (`Wrong_type key))
   | _ -> Deferred.return @@ Error `Unexpected
 
 let with_connection ?(port = 6379) ~host f =
