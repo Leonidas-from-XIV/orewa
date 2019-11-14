@@ -272,6 +272,8 @@ val restore
   string ->
   (unit, [> common_error]) Deferred.Result.t
 
+val lindex : t -> string -> int -> (string option, [> common_error]) Deferred.Result.t
+
 val connect : ?port:int -> host:string -> t Deferred.t
 
 val close : t -> unit Deferred.t

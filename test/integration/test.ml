@@ -977,6 +977,17 @@ let test_close () =
   Alcotest.(check soe) "Get test key" (Error `Connection_closed) res;
   return ()
 
+let test_lindex () =
+  let%bind conn = Orewa.connect ?port:None ~host in
+  let key = random_key () in
+  let%bind res = Orewa.lindex conn key 0 in
+  Alcotest.(check soe) "Get index of not existing list" (Ok None) res;
+  let not_list = random_key () in
+  let%bind _ = Orewa.set conn ~key:not_list "this is not a list" in
+  let%bind res = Orewa.lindex conn key 0 in
+  Alcotest.(check soe) "Get index of not a list" (Ok None) res;
+  return ()
+
 let tests =
   Alcotest_async.
     [ test_case "ECHO" `Slow test_echo;
@@ -1040,7 +1051,8 @@ let tests =
       test_case "DUMP" `Slow test_dump;
       test_case "RESTORE" `Slow test_restore;
       test_case "PIPELINE" `Slow test_pipelining;
-      test_case "CLOSE" `Slow test_close ]
+      test_case "CLOSE" `Slow test_close;
+      test_case "LINDEX" `Slow test_lindex ]
 
 let () =
   Log.Global.set_level `Debug;

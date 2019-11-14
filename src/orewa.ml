@@ -657,6 +657,13 @@ let restore t ~key ?ttl ?replace value =
   | Resp.String "OK" -> return ()
   | _ -> Deferred.return @@ Error `Unexpected
 
+let lindex t key index =
+  let open Deferred.Result.Let_syntax in
+  match%bind request t ["LINDEX"; key; string_of_int index] with
+  | Resp.Bulk v -> return @@ Some v
+  | Resp.Null -> return None
+  | _ -> Deferred.return @@ Error `Unexpected
+
 let with_connection ?(port = 6379) ~host f =
   let where = Tcp.Where_to_connect.of_host_and_port @@ Host_and_port.create ~host ~port in
   Tcp.with_connection where @@ fun _socket reader writer ->
