@@ -995,6 +995,13 @@ let test_linsert () =
   Alcotest.(check ie) "Insert into nonexisting list" (Ok 0) res;
   return ()
 
+let test_llen () =
+  Orewa.with_connection ~host @@ fun conn ->
+  let key = random_key () in
+  let%bind res = Orewa.llen conn key in
+  Alcotest.(check ie) "Lenght of nonexisting list" (Ok 0) res;
+  return ()
+
 let tests =
   Alcotest_async.
     [ test_case "ECHO" `Slow test_echo;
@@ -1060,6 +1067,7 @@ let tests =
       test_case "PIPELINE" `Slow test_pipelining;
       test_case "CLOSE" `Slow test_close;
       test_case "LINSERT" `Slow test_linsert;
+      test_case "LLEN" `Slow test_llen;
       test_case "LINDEX" `Slow test_lindex ]
 
 let () =
