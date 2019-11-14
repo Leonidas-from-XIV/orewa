@@ -197,6 +197,15 @@ let lrem t ~key count ~element =
   | Resp.Integer n -> return n
   | _ -> Deferred.return @@ Error `Unexpected
 
+let lset t ~key index ~element =
+  let open Deferred.Result.Let_syntax in
+  match%bind request t ["LSET"; key; string_of_int index; element] with
+  | Resp.String "OK" -> return ()
+  | Resp.Error "ERR no such key" -> Deferred.return @@ Error (`No_such_key key)
+  | Resp.Error "ERR index out of range" ->
+      Deferred.return @@ Error (`Index_out_of_range key)
+  | _ -> Deferred.return @@ Error `Unexpected
+
 let append t ~key value =
   let open Deferred.Result.Let_syntax in
   match%bind request t ["APPEND"; key; value] with

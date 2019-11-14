@@ -300,6 +300,15 @@ val lrem
   element:string ->
   (int, [> common_error]) Deferred.Result.t
 
+val lset
+  :  t ->
+  key:string ->
+  int ->
+  element:string ->
+  ( unit,
+    [> common_error | `No_such_key of string | `Index_out_of_range of string] )
+  Deferred.Result.t
+
 val connect : ?port:int -> host:string -> t Deferred.t
 
 val close : t -> unit Deferred.t

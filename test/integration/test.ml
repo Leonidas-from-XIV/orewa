@@ -13,7 +13,8 @@ module Orewa_error = struct
     | `Redis_error of string
     | `No_such_key of string
     | `Not_expiring of string
-    | `Wrong_type of string ]
+    | `Wrong_type of string
+    | `Index_out_of_range of string ]
   [@@deriving show, eq]
 end
 
@@ -1063,6 +1064,22 @@ let test_lrem () =
   Alcotest.(check ie) "Trying to remove not existing element" (Ok 0) res;
   return ()
 
+let test_lset () =
+  Orewa.with_connection ~host @@ fun conn ->
+  let key = random_key () in
+  let element = random_key () in
+  let%bind res = Orewa.lset conn ~key 0 ~element in
+  Alcotest.(check ue) "Setting nonexistent list" (Error (`No_such_key key)) res;
+  let%bind _ = Orewa.lpush conn key ~element in
+  let%bind res = Orewa.lset conn ~key 0 ~element in
+  Alcotest.(check ue) "Setting existent index of list" (Ok ()) res;
+  let%bind res = Orewa.lset conn ~key 1 ~element in
+  Alcotest.(check ue)
+    "Setting non-existent index of list"
+    (Error (`Index_out_of_range key))
+    res;
+  return ()
+
 let tests =
   Alcotest_async.
     [ test_case "ECHO" `Slow test_echo;
@@ -1078,6 +1095,7 @@ let tests =
       test_case "LPOP" `Slow test_lpop;
       test_case "LRANGE" `Slow test_lpush_lrange;
       test_case "LREM" `Slow test_lrem;
+      test_case "LSET" `Slow test_lset;
       test_case "Large LRANGE" `Slow test_large_lrange;
       test_case "APPEND" `Slow test_append;
       test_case "AUTH" `Slow test_auth;
