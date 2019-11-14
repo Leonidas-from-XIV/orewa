@@ -12,16 +12,11 @@ type wrong_type = [`Wrong_type of string] [@@deriving show, eq]
 
 val echo : t -> string -> (string, [> common_error]) Deferred.Result.t
 
-type exist =
-  | Always
-  | Not_if_exists
-  | Only_if_exists
-
 val set
   :  t ->
   key:string ->
   ?expire:Time.Span.t ->
-  ?exist:exist ->
+  ?exist:[`Always | `Not_if_exists | `Only_if_exists] ->
   string ->
   (bool, [> common_error]) Deferred.Result.t
 
