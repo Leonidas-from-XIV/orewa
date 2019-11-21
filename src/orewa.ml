@@ -6,6 +6,8 @@ type common_error =
   | `Unexpected ]
 [@@deriving show, eq]
 
+type wrong_type = [`Wrong_type of string] [@@deriving show, eq]
+
 type response = (Resp.t, common_error) result
 
 type command = string list
@@ -88,12 +90,7 @@ let echo t message =
   | Resp.Bulk v -> return v
   | _ -> Deferred.return @@ Error `Unexpected
 
-type exist =
-  | Always
-  | Not_if_exists
-  | Only_if_exists
-
-let set t ~key ?expire ?(exist = Always) value =
+let set t ~key ?expire ?(exist = `Always) value =
   let open Deferred.Result.Let_syntax in
   let expiry =
     match expire with
@@ -102,9 +99,9 @@ let set t ~key ?expire ?(exist = Always) value =
   in
   let existence =
     match exist with
-    | Always -> []
-    | Not_if_exists -> ["NX"]
-    | Only_if_exists -> ["XX"]
+    | `Always -> []
+    | `Not_if_exists -> ["NX"]
+    | `Only_if_exists -> ["XX"]
   in
   let command = ["SET"; key; value] @ expiry @ existence in
   match%bind request t command with
@@ -169,11 +166,23 @@ let msetnx t alist =
   | Resp.Integer 0 -> return false
   | _ -> Deferred.return @@ Error `Unexpected
 
-let lpush t ~key value =
+let is_wrong_type msg = String.is_prefix msg ~prefix:"WRONGTYPE"
+
+let omnidirectional_push command t ?(exist = `Always) ~element ?(elements = []) key =
   let open Deferred.Result.Let_syntax in
-  match%bind request t ["LPUSH"; key; value] with
+  let command =
+    match exist with
+    | `Always -> command
+    | `Only_if_exists -> Printf.sprintf "%sX" command
+  in
+  match%bind request t ([command; key; element] @ elements) with
   | Resp.Integer n -> return n
+  | Resp.Error e when is_wrong_type e -> Deferred.return (Error (`Wrong_type key))
   | _ -> Deferred.return @@ Error `Unexpected
+
+let lpush = omnidirectional_push "LPUSH"
+
+let rpush = omnidirectional_push "RPUSH"
 
 let lrange t ~key ~start ~stop =
   let open Deferred.Result.Let_syntax in
@@ -184,6 +193,36 @@ let lrange t ~key ~start ~stop =
           | _ -> Error `Unexpected)
       |> Result.all
       |> Deferred.return
+  | _ -> Deferred.return @@ Error `Unexpected
+
+let lrem t ~key count ~element =
+  let open Deferred.Result.Let_syntax in
+  match%bind request t ["LREM"; key; string_of_int count; element] with
+  | Resp.Integer n -> return n
+  | _ -> Deferred.return @@ Error `Unexpected
+
+let lset t ~key index ~element =
+  let open Deferred.Result.Let_syntax in
+  match%bind request t ["LSET"; key; string_of_int index; element] with
+  | Resp.String "OK" -> return ()
+  | Resp.Error "ERR no such key" -> Deferred.return @@ Error (`No_such_key key)
+  | Resp.Error "ERR index out of range" ->
+      Deferred.return @@ Error (`Index_out_of_range key)
+  | _ -> Deferred.return @@ Error `Unexpected
+
+let ltrim t ~start ~end' key =
+  let open Deferred.Result.Let_syntax in
+  match%bind request t ["LTRIM"; key; string_of_int start; string_of_int end'] with
+  | Resp.String "OK" -> return ()
+  | _ -> Deferred.return @@ Error `Unexpected
+
+let rpoplpush t ~source ~destination =
+  let open Deferred.Result.Let_syntax in
+  match%bind request t ["RPOPLPUSH"; source; destination] with
+  | Resp.Bulk element -> return element
+  | Resp.Error e when is_wrong_type e ->
+      let keys = Printf.sprintf "%s -> %s" source destination in
+      Deferred.return (Error (`Wrong_type keys))
   | _ -> Deferred.return @@ Error `Unexpected
 
 let append t ~key value =
@@ -656,6 +695,45 @@ let restore t ~key ?ttl ?replace value =
   match%bind request t (["RESTORE"; key; ttl; value] @ replace) with
   | Resp.String "OK" -> return ()
   | _ -> Deferred.return @@ Error `Unexpected
+
+let lindex t key index =
+  let open Deferred.Result.Let_syntax in
+  match%bind request t ["LINDEX"; key; string_of_int index] with
+  | Resp.Bulk v -> return @@ Some v
+  | Resp.Null -> return None
+  | _ -> Deferred.return @@ Error `Unexpected
+
+type position =
+  | Before
+  | After
+
+let string_of_position = function
+  | Before -> "BEFORE"
+  | After -> "AFTER"
+
+let linsert t ~key position ~element ~pivot =
+  let open Deferred.Result.Let_syntax in
+  match%bind request t ["LINSERT"; key; string_of_position position; pivot; element] with
+  | Resp.Integer n -> return n
+  | _ -> Deferred.return @@ Error `Unexpected
+
+let llen t key =
+  let open Deferred.Result.Let_syntax in
+  match%bind request t ["LLEN"; key] with
+  | Resp.Integer n -> return n
+  | _ -> Deferred.return @@ Error `Unexpected
+
+let omnidirectional_pop command t key =
+  let open Deferred.Result.Let_syntax in
+  match%bind request t [command; key] with
+  | Resp.Bulk s -> return @@ Some s
+  | Resp.Null -> return None
+  | Resp.Error e when is_wrong_type e -> Deferred.return (Error (`Wrong_type key))
+  | _ -> Deferred.return @@ Error `Unexpected
+
+let rpop = omnidirectional_pop "RPOP"
+
+let lpop = omnidirectional_pop "LPOP"
 
 let with_connection ?(port = 6379) ~host f =
   let where = Tcp.Where_to_connect.of_host_and_port @@ Host_and_port.create ~host ~port in

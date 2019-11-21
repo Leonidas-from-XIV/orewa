@@ -8,18 +8,15 @@ type common_error =
   | `Unexpected ]
 [@@deriving show, eq]
 
-val echo : t -> string -> (string, [> common_error]) Deferred.Result.t
+type wrong_type = [`Wrong_type of string] [@@deriving show, eq]
 
-type exist =
-  | Always
-  | Not_if_exists
-  | Only_if_exists
+val echo : t -> string -> (string, [> common_error]) Deferred.Result.t
 
 val set
   :  t ->
   key:string ->
   ?expire:Time.Span.t ->
-  ?exist:exist ->
+  ?exist:[`Always | `Not_if_exists | `Only_if_exists] ->
   string ->
   (bool, [> common_error]) Deferred.Result.t
 
@@ -46,7 +43,25 @@ val mset : t -> (string * string) list -> (unit, [> common_error]) Deferred.Resu
 
 val msetnx : t -> (string * string) list -> (bool, [> common_error]) Deferred.Result.t
 
-val lpush : t -> key:string -> string -> (int, [> common_error]) Deferred.Result.t
+val lpush
+  :  t ->
+  ?exist:[`Always | `Only_if_exists] ->
+  element:string ->
+  ?elements:string list ->
+  string ->
+  (int, [> common_error | wrong_type]) Deferred.Result.t
+
+val rpush
+  :  t ->
+  ?exist:[`Always | `Only_if_exists] ->
+  element:string ->
+  ?elements:string list ->
+  string ->
+  (int, [> common_error | wrong_type]) Deferred.Result.t
+
+val lpop : t -> string -> (string option, [> common_error | wrong_type]) Deferred.Result.t
+
+val rpop : t -> string -> (string option, [> common_error | wrong_type]) Deferred.Result.t
 
 val lrange
   :  t ->
@@ -54,6 +69,12 @@ val lrange
   start:int ->
   stop:int ->
   (string list, [> common_error]) Deferred.Result.t
+
+val rpoplpush
+  :  t ->
+  source:string ->
+  destination:string ->
+  (string, [> common_error | wrong_type]) Deferred.Result.t
 
 val append : t -> key:string -> string -> (int, [> common_error]) Deferred.Result.t
 
@@ -269,6 +290,45 @@ val restore
   key:string ->
   ?ttl:Time.Span.t ->
   ?replace:bool ->
+  string ->
+  (unit, [> common_error]) Deferred.Result.t
+
+val lindex : t -> string -> int -> (string option, [> common_error]) Deferred.Result.t
+
+type position =
+  | Before
+  | After
+
+val linsert
+  :  t ->
+  key:string ->
+  position ->
+  element:string ->
+  pivot:string ->
+  (int, [> common_error]) Deferred.Result.t
+
+val llen : t -> string -> (int, [> common_error]) Deferred.Result.t
+
+val lrem
+  :  t ->
+  key:string ->
+  int ->
+  element:string ->
+  (int, [> common_error]) Deferred.Result.t
+
+val lset
+  :  t ->
+  key:string ->
+  int ->
+  element:string ->
+  ( unit,
+    [> common_error | `No_such_key of string | `Index_out_of_range of string] )
+  Deferred.Result.t
+
+val ltrim
+  :  t ->
+  start:int ->
+  end':int ->
   string ->
   (unit, [> common_error]) Deferred.Result.t
 

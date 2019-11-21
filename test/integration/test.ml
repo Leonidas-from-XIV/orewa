@@ -12,7 +12,9 @@ module Orewa_error = struct
     [ Orewa.common_error
     | `Redis_error of string
     | `No_such_key of string
-    | `Not_expiring of string ]
+    | `Not_expiring of string
+    | `Wrong_type of string
+    | `Index_out_of_range of string ]
   [@@deriving show, eq]
 end
 
@@ -73,12 +75,12 @@ let test_set () =
   let key = random_key () in
   let%bind res = Orewa.set conn ~key "value" in
   Alcotest.(check be) "Successfully SET" (Ok true) res;
-  let%bind res = Orewa.set conn ~key ~exist:Orewa.Not_if_exists "other" in
+  let%bind res = Orewa.set conn ~key ~exist:`Not_if_exists "other" in
   Alcotest.(check be) "Didn't SET again" (Ok false) res;
-  let%bind res = Orewa.set conn ~key ~exist:Orewa.Only_if_exists "other" in
+  let%bind res = Orewa.set conn ~key ~exist:`Only_if_exists "other" in
   Alcotest.(check be) "Successfully re-SET" (Ok true) res;
   let not_existing = random_key () in
-  let%bind res = Orewa.set conn ~key:not_existing ~exist:Orewa.Only_if_exists "value" in
+  let%bind res = Orewa.set conn ~key:not_existing ~exist:`Only_if_exists "value" in
   Alcotest.(check be) "Didn't SET non-existing" (Ok false) res;
   return ()
 
@@ -208,37 +210,87 @@ let test_large_set_get () =
 let test_lpush () =
   Orewa.with_connection ~host @@ fun conn ->
   let key = random_key () in
-  let value = "value" in
-  let%bind res = Orewa.lpush conn ~key value in
-  Alcotest.(check ie) "LPUSH did not work" (Ok 1) res;
+  let not_list = random_key () in
+  let element = "value" in
+  let%bind res = Orewa.lpush conn ~exist:`Only_if_exists ~element key in
+  Alcotest.(check ie) "LPUSHX to non-existing list" (Ok 0) res;
+  let%bind res = Orewa.lpush conn ~element key in
+  Alcotest.(check ie) "LPUSH to empty list" (Ok 1) res;
+  let%bind res = Orewa.lpush conn ~exist:`Always ~element key in
+  Alcotest.(check ie) "LPUSH to existing list" (Ok 2) res;
+  let%bind _ = Orewa.set conn ~key:not_list element in
+  let%bind res = Orewa.lpush conn ~element not_list in
+  Alcotest.(check ie) "LPUSH to not a list" (Error (`Wrong_type not_list)) res;
+  return ()
+
+let test_rpush () =
+  Orewa.with_connection ~host @@ fun conn ->
+  let key = random_key () in
+  let not_list = random_key () in
+  let element = "value" in
+  let%bind res = Orewa.rpush conn ~exist:`Only_if_exists ~element key in
+  Alcotest.(check ie) "RPUSHX to non-existing list" (Ok 0) res;
+  let%bind res = Orewa.rpush conn ~element key in
+  Alcotest.(check ie) "RPUSH to empty list" (Ok 1) res;
+  let%bind res = Orewa.rpush conn ~exist:`Always ~element key in
+  Alcotest.(check ie) "RPUSH to existing list" (Ok 2) res;
+  let%bind _ = Orewa.set conn ~key:not_list element in
+  let%bind res = Orewa.rpush conn ~element not_list in
+  Alcotest.(check ie) "RPUSH to not a list" (Error (`Wrong_type not_list)) res;
   return ()
 
 let test_lpush_lrange () =
   Orewa.with_connection ~host @@ fun conn ->
   let key = random_key () in
-  let value = random_key () in
-  let value' = random_key () in
-  let%bind _ = Orewa.lpush conn ~key value in
-  let%bind _ = Orewa.lpush conn ~key value' in
+  let element = random_key () in
+  let element' = random_key () in
+  let%bind _ = Orewa.lpush conn ~element key in
+  let%bind _ = Orewa.lpush conn ~element:element' key in
   let%bind res = Orewa.lrange conn ~key ~start:0 ~stop:(-1) in
   Alcotest.(check (result (list truncated_string) err))
     "LRANGE failed"
-    (Ok [value'; value])
+    (Ok [element'; element])
     res;
   return ()
 
 let test_large_lrange () =
   Orewa.with_connection ~host @@ fun conn ->
   let key = random_key () in
-  let value = String.init exceeding_read_buffer ~f:(fun _ -> 'a') in
+  let element = String.init exceeding_read_buffer ~f:(fun _ -> 'a') in
   let values = 5 in
   let%bind expected =
     Deferred.List.init values ~f:(fun _ ->
-        let%bind _ = Orewa.lpush conn ~key value in
-        return value)
+        let%bind _ = Orewa.lpush conn ~element key in
+        return element)
   in
   let%bind res = Orewa.lrange conn ~key ~start:0 ~stop:(-1) in
   Alcotest.(check (result (list truncated_string) err)) "LRANGE failed" (Ok expected) res;
+  return ()
+
+let test_rpoplpush () =
+  Orewa.with_connection ~host @@ fun conn ->
+  let source = random_key () in
+  let destination = random_key () in
+  let element = "three" in
+  let not_list = random_key () in
+  let%bind _ = Orewa.rpush conn source ~element:"one" in
+  let%bind _ = Orewa.rpush conn source ~element:"two" in
+  let%bind _ = Orewa.rpush conn source ~element in
+  let%bind res = Orewa.rpoplpush conn ~source ~destination in
+  Alcotest.(check se) "RPOPLPUSH moved the correct element" (Ok element) res;
+  let%bind _ = Orewa.set conn ~key:not_list element in
+  let%bind res = Orewa.rpoplpush conn ~source ~destination:not_list in
+  let wrong_move_destination = Printf.sprintf "%s -> %s" source not_list in
+  Alcotest.(check se)
+    "RPOPLPUSH failed to move to non-list"
+    (Error (`Wrong_type wrong_move_destination))
+    res;
+  let%bind res = Orewa.rpoplpush conn ~source:not_list ~destination in
+  let wrong_move_source = Printf.sprintf "%s -> %s" not_list destination in
+  Alcotest.(check se)
+    "RPOPLPUSH failed to move from non-list"
+    (Error (`Wrong_type wrong_move_source))
+    res;
   return ()
 
 let test_append () =
@@ -822,7 +874,7 @@ let test_sort () =
   in
   let%bind () =
     Deferred.List.iter randomly_ordered ~f:(fun value ->
-        let%bind _ = Orewa.lpush conn ~key (string_of_int value) in
+        let%bind _ = Orewa.lpush conn ~element:(string_of_int value) key in
         return ())
   in
   let%bind res = Orewa.sort conn key in
@@ -898,7 +950,7 @@ let test_type' () =
   let list_key = random_key () in
   let missing_key = random_key () in
   let%bind _ = Orewa.set conn ~key:string_key "aaaa" in
-  let%bind _ = Orewa.lpush conn ~key:list_key "aaaa" in
+  let%bind _ = Orewa.lpush conn ~element:"aaaa" list_key in
   let%bind res = Orewa.type' conn string_key in
   Alcotest.(check soe) "Finds string" (Ok (Some "string")) res;
   let%bind res = Orewa.type' conn list_key in
@@ -924,21 +976,21 @@ let test_restore () =
   let key = random_key () in
   let list_key = random_key () in
   let new_key = random_key () in
-  let value = random_key () in
-  let%bind _ = Orewa.set conn ~key value in
+  let element = random_key () in
+  let%bind _ = Orewa.set conn ~key element in
   let%bind res = Orewa.dump conn key in
   let dumped = Option.value_exn (Option.value_exn (Result.ok res)) in
   let%bind res = Orewa.restore conn ~key:new_key dumped in
   Alcotest.(check ue) "Restoring key" (Ok ()) res;
   let%bind res = Orewa.get conn new_key in
-  Alcotest.(check soe) "Correct value restored" (Ok (Some value)) res;
-  let%bind _ = Orewa.lpush conn ~key:list_key value in
+  Alcotest.(check soe) "Correct value restored" (Ok (Some element)) res;
+  let%bind _ = Orewa.lpush conn ~element list_key in
   let%bind res = Orewa.dump conn list_key in
   let dumped = Option.value_exn (Option.value_exn (Result.ok res)) in
   let%bind res = Orewa.restore conn ~key:new_key ~replace:true dumped in
   Alcotest.(check ue) "Restoring key" (Ok ()) res;
   let%bind res = Orewa.lrange conn ~key:new_key ~start:0 ~stop:(-1) in
-  Alcotest.(check (result (list string) err)) "Correct value restored" (Ok [value]) res;
+  Alcotest.(check (result (list string) err)) "Correct value restored" (Ok [element]) res;
   return ()
 
 let test_pipelining () =
@@ -977,6 +1029,132 @@ let test_close () =
   Alcotest.(check soe) "Get test key" (Error `Connection_closed) res;
   return ()
 
+let test_lindex () =
+  Orewa.with_connection ~host @@ fun conn ->
+  let key = random_key () in
+  let element = random_key () in
+  let%bind res = Orewa.lindex conn key 0 in
+  Alcotest.(check soe) "Get element out of empty list" (Ok None) res;
+  let not_list = random_key () in
+  let%bind _ = Orewa.set conn ~key:not_list "this is not a list" in
+  let%bind res = Orewa.lindex conn key 0 in
+  Alcotest.(check soe) "Get first element of not a list" (Ok None) res;
+  let%bind _ = Orewa.lpush conn ~element key in
+  let%bind _ = Orewa.lpush conn ~element:(random_key ()) key in
+  let%bind res = Orewa.lindex conn key 1 in
+  Alcotest.(check soe) "Get second element of non-empty list" (Ok (Some element)) res;
+  return ()
+
+let test_linsert () =
+  Orewa.with_connection ~host @@ fun conn ->
+  let key = random_key () in
+  let element = random_key () in
+  let pivot = random_key () in
+  let%bind res = Orewa.linsert conn ~key Orewa.Before ~element ~pivot in
+  Alcotest.(check ie) "Insert into nonexisting list" (Ok 0) res;
+  let%bind _ = Orewa.lpush conn ~element:pivot key in
+  let%bind res = Orewa.linsert conn ~key Orewa.Before ~element ~pivot in
+  Alcotest.(check ie) "Insert before into existing list" (Ok 2) res;
+  let%bind res = Orewa.linsert conn ~key Orewa.After ~element ~pivot in
+  Alcotest.(check ie) "Insert after into existing list" (Ok 3) res;
+  return ()
+
+let test_llen () =
+  Orewa.with_connection ~host @@ fun conn ->
+  let key = random_key () in
+  let element = random_key () in
+  let%bind res = Orewa.llen conn key in
+  Alcotest.(check ie) "Lenght of nonexisting list" (Ok 0) res;
+  let%bind _ = Orewa.lpush conn ~element key in
+  let%bind res = Orewa.llen conn key in
+  Alcotest.(check ie) "Lenght of existing list" (Ok 1) res;
+  return ()
+
+let test_lpop () =
+  Orewa.with_connection ~host @@ fun conn ->
+  let key = random_key () in
+  let not_list = random_key () in
+  let element = random_key () in
+  let left_element = random_key () in
+  let%bind res = Orewa.lpop conn key in
+  Alcotest.(check soe) "Pop from empty key" (Ok None) res;
+  let%bind _ = Orewa.set conn ~key:not_list "this is not a list" in
+  let%bind res = Orewa.lpop conn not_list in
+  Alcotest.(check soe) "Pop from not a list" (Error (`Wrong_type not_list)) res;
+  let%bind _ = Orewa.lpush conn ~element key in
+  let%bind _ = Orewa.lpush conn ~element:left_element key in
+  let%bind res = Orewa.lpop conn key in
+  Alcotest.(check soe) "Pop from existing list" (Ok (Some left_element)) res;
+  return ()
+
+let test_rpop () =
+  Orewa.with_connection ~host @@ fun conn ->
+  let key = random_key () in
+  let not_list = random_key () in
+  let element = random_key () in
+  let right_element = random_key () in
+  let%bind res = Orewa.rpop conn key in
+  Alcotest.(check soe) "Pop from empty key" (Ok None) res;
+  let%bind _ = Orewa.set conn ~key:not_list "this is not a list" in
+  let%bind res = Orewa.rpop conn not_list in
+  Alcotest.(check soe) "Pop from not a list" (Error (`Wrong_type not_list)) res;
+  let%bind _ = Orewa.lpush conn ~element:right_element key in
+  let%bind _ = Orewa.lpush conn ~element key in
+  let%bind res = Orewa.rpop conn key in
+  Alcotest.(check soe) "Pop from existing list" (Ok (Some right_element)) res;
+  return ()
+
+let test_lrem () =
+  Orewa.with_connection ~host @@ fun conn ->
+  let key = random_key () in
+  let element = random_key () in
+  let%bind _ = Orewa.lpush conn key ~element in
+  let%bind _ = Orewa.lpush conn key ~element in
+  let%bind _ = Orewa.lpush conn key ~element:"SPACER" in
+  let%bind _ = Orewa.lpush conn key ~element in
+  let%bind _ = Orewa.lpush conn key ~element in
+  let%bind res = Orewa.lrem conn ~key 1 ~element in
+  Alcotest.(check ie) "Removing first occurence" (Ok 1) res;
+  let%bind res = Orewa.lrem conn ~key 1 ~element in
+  Alcotest.(check ie) "Removing second occurence" (Ok 1) res;
+  let%bind res = Orewa.lrem conn ~key (-2) ~element in
+  Alcotest.(check ie) "Removing final two occurence" (Ok 2) res;
+  let%bind res = Orewa.llen conn key in
+  Alcotest.(check ie) "Removing final two occurence" (Ok 1) res;
+  let%bind res = Orewa.lrem conn ~key 1 ~element in
+  Alcotest.(check ie) "Trying to remove not existing element" (Ok 0) res;
+  return ()
+
+let test_lset () =
+  Orewa.with_connection ~host @@ fun conn ->
+  let key = random_key () in
+  let element = random_key () in
+  let%bind res = Orewa.lset conn ~key 0 ~element in
+  Alcotest.(check ue) "Setting nonexistent list" (Error (`No_such_key key)) res;
+  let%bind _ = Orewa.lpush conn key ~element in
+  let%bind res = Orewa.lset conn ~key 0 ~element in
+  Alcotest.(check ue) "Setting existent index of list" (Ok ()) res;
+  let%bind res = Orewa.lset conn ~key 1 ~element in
+  Alcotest.(check ue)
+    "Setting non-existent index of list"
+    (Error (`Index_out_of_range key))
+    res;
+  return ()
+
+let test_ltrim () =
+  Orewa.with_connection ~host @@ fun conn ->
+  let key = random_key () in
+  let element = random_key () in
+  let elements = 10 in
+  let%bind _ =
+    List.init elements ~f:(fun _ -> Orewa.lpush conn key ~element) |> Deferred.all
+  in
+  let%bind res = Orewa.ltrim conn ~start:0 ~end':4 key in
+  Alcotest.(check ue) "Trimming list" (Ok ()) res;
+  let%bind res = Orewa.llen conn key in
+  Alcotest.(check ie) "List is trimmed" (Ok 5) res;
+  return ()
+
 let tests =
   Alcotest_async.
     [ test_case "ECHO" `Slow test_echo;
@@ -987,9 +1165,16 @@ let tests =
       test_case "MSETNX" `Slow test_msetnx;
       test_case "GETRANGE" `Slow test_getrange;
       test_case "Large SET/GET" `Slow test_large_set_get;
+      test_case "RPOPLPUSH" `Slow test_rpoplpush;
       test_case "SET with expiry" `Slow test_set_expiry;
       test_case "LPUSH" `Slow test_lpush;
+      test_case "RPUSH" `Slow test_rpush;
+      test_case "LPOP" `Slow test_lpop;
+      test_case "RPOP" `Slow test_rpop;
       test_case "LRANGE" `Slow test_lpush_lrange;
+      test_case "LREM" `Slow test_lrem;
+      test_case "LSET" `Slow test_lset;
+      test_case "LTRIM" `Slow test_ltrim;
       test_case "Large LRANGE" `Slow test_large_lrange;
       test_case "APPEND" `Slow test_append;
       test_case "AUTH" `Slow test_auth;
@@ -1040,7 +1225,10 @@ let tests =
       test_case "DUMP" `Slow test_dump;
       test_case "RESTORE" `Slow test_restore;
       test_case "PIPELINE" `Slow test_pipelining;
-      test_case "CLOSE" `Slow test_close ]
+      test_case "CLOSE" `Slow test_close;
+      test_case "LINSERT" `Slow test_linsert;
+      test_case "LLEN" `Slow test_llen;
+      test_case "LINDEX" `Slow test_lindex ]
 
 let () =
   Log.Global.set_level `Debug;
