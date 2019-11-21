@@ -216,6 +216,15 @@ let ltrim t ~start ~end' key =
   | Resp.String "OK" -> return ()
   | _ -> Deferred.return @@ Error `Unexpected
 
+let rpoplpush t ~source ~destination =
+  let open Deferred.Result.Let_syntax in
+  match%bind request t ["RPOPLPUSH"; source; destination] with
+  | Resp.Bulk element -> return element
+  | Resp.Error e when is_wrong_type e ->
+      let keys = Printf.sprintf "%s -> %s" source destination in
+      Deferred.return (Error (`Wrong_type keys))
+  | _ -> Deferred.return @@ Error `Unexpected
+
 let append t ~key value =
   let open Deferred.Result.Let_syntax in
   match%bind request t ["APPEND"; key; value] with

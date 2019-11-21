@@ -267,6 +267,32 @@ let test_large_lrange () =
   Alcotest.(check (result (list truncated_string) err)) "LRANGE failed" (Ok expected) res;
   return ()
 
+let test_rpoplpush () =
+  Orewa.with_connection ~host @@ fun conn ->
+  let source = random_key () in
+  let destination = random_key () in
+  let element = "three" in
+  let not_list = random_key () in
+  let%bind _ = Orewa.rpush conn source ~element:"one" in
+  let%bind _ = Orewa.rpush conn source ~element:"two" in
+  let%bind _ = Orewa.rpush conn source ~element in
+  let%bind res = Orewa.rpoplpush conn ~source ~destination in
+  Alcotest.(check se) "RPOPLPUSH moved the correct element" (Ok element) res;
+  let%bind _ = Orewa.set conn ~key:not_list element in
+  let%bind res = Orewa.rpoplpush conn ~source ~destination:not_list in
+  let wrong_move_destination = Printf.sprintf "%s -> %s" source not_list in
+  Alcotest.(check se)
+    "RPOPLPUSH failed to move to non-list"
+    (Error (`Wrong_type wrong_move_destination))
+    res;
+  let%bind res = Orewa.rpoplpush conn ~source:not_list ~destination in
+  let wrong_move_source = Printf.sprintf "%s -> %s" not_list destination in
+  Alcotest.(check se)
+    "RPOPLPUSH failed to move from non-list"
+    (Error (`Wrong_type wrong_move_source))
+    res;
+  return ()
+
 let test_append () =
   Orewa.with_connection ~host @@ fun conn ->
   let key = random_key () in
@@ -1139,6 +1165,7 @@ let tests =
       test_case "MSETNX" `Slow test_msetnx;
       test_case "GETRANGE" `Slow test_getrange;
       test_case "Large SET/GET" `Slow test_large_set_get;
+      test_case "RPOPLPUSH" `Slow test_rpoplpush;
       test_case "SET with expiry" `Slow test_set_expiry;
       test_case "LPUSH" `Slow test_lpush;
       test_case "RPUSH" `Slow test_rpush;

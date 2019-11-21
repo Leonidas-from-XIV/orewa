@@ -70,6 +70,12 @@ val lrange
   stop:int ->
   (string list, [> common_error]) Deferred.Result.t
 
+val rpoplpush
+  :  t ->
+  source:string ->
+  destination:string ->
+  (string, [> common_error | wrong_type]) Deferred.Result.t
+
 val append : t -> key:string -> string -> (int, [> common_error]) Deferred.Result.t
 
 val auth
