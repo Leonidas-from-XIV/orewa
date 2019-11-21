@@ -223,6 +223,22 @@ let test_lpush () =
   Alcotest.(check ie) "LPUSH to not a list" (Error (`Wrong_type not_list)) res;
   return ()
 
+let test_rpush () =
+  Orewa.with_connection ~host @@ fun conn ->
+  let key = random_key () in
+  let not_list = random_key () in
+  let element = "value" in
+  let%bind res = Orewa.rpush conn ~exist:`Only_if_exists ~element key in
+  Alcotest.(check ie) "RPUSHX to non-existing list" (Ok 0) res;
+  let%bind res = Orewa.rpush conn ~element key in
+  Alcotest.(check ie) "RPUSH to empty list" (Ok 1) res;
+  let%bind res = Orewa.rpush conn ~exist:`Always ~element key in
+  Alcotest.(check ie) "RPUSH to existing list" (Ok 2) res;
+  let%bind _ = Orewa.set conn ~key:not_list element in
+  let%bind res = Orewa.rpush conn ~element not_list in
+  Alcotest.(check ie) "RPUSH to not a list" (Error (`Wrong_type not_list)) res;
+  return ()
+
 let test_lpush_lrange () =
   Orewa.with_connection ~host @@ fun conn ->
   let key = random_key () in
@@ -1125,6 +1141,7 @@ let tests =
       test_case "Large SET/GET" `Slow test_large_set_get;
       test_case "SET with expiry" `Slow test_set_expiry;
       test_case "LPUSH" `Slow test_lpush;
+      test_case "RPUSH" `Slow test_rpush;
       test_case "LPOP" `Slow test_lpop;
       test_case "RPOP" `Slow test_rpop;
       test_case "LRANGE" `Slow test_lpush_lrange;

@@ -168,17 +168,21 @@ let msetnx t alist =
 
 let is_wrong_type msg = String.is_prefix msg ~prefix:"WRONGTYPE"
 
-let lpush t ?(exist = `Always) ~element ?(elements = []) key =
+let omnidirectional_push command t ?(exist = `Always) ~element ?(elements = []) key =
   let open Deferred.Result.Let_syntax in
   let command =
     match exist with
-    | `Always -> "LPUSH"
-    | `Only_if_exists -> "LPUSHX"
+    | `Always -> command
+    | `Only_if_exists -> Printf.sprintf "%sX" command
   in
   match%bind request t ([command; key; element] @ elements) with
   | Resp.Integer n -> return n
   | Resp.Error e when is_wrong_type e -> Deferred.return (Error (`Wrong_type key))
   | _ -> Deferred.return @@ Error `Unexpected
+
+let lpush = omnidirectional_push "LPUSH"
+
+let rpush = omnidirectional_push "RPUSH"
 
 let lrange t ~key ~start ~stop =
   let open Deferred.Result.Let_syntax in

@@ -51,6 +51,14 @@ val lpush
   string ->
   (int, [> common_error | wrong_type]) Deferred.Result.t
 
+val rpush
+  :  t ->
+  ?exist:[`Always | `Only_if_exists] ->
+  element:string ->
+  ?elements:string list ->
+  string ->
+  (int, [> common_error | wrong_type]) Deferred.Result.t
+
 val lpop : t -> string -> (string option, [> common_error | wrong_type]) Deferred.Result.t
 
 val rpop : t -> string -> (string option, [> common_error | wrong_type]) Deferred.Result.t
