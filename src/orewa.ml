@@ -710,13 +710,17 @@ let llen t key =
   | Resp.Integer n -> return n
   | _ -> Deferred.return @@ Error `Unexpected
 
-let lpop t key =
+let omnidirectional_pop command t key =
   let open Deferred.Result.Let_syntax in
-  match%bind request t ["LPOP"; key] with
+  match%bind request t [command; key] with
   | Resp.Bulk s -> return @@ Some s
   | Resp.Null -> return None
   | Resp.Error e when is_wrong_type e -> Deferred.return (Error (`Wrong_type key))
   | _ -> Deferred.return @@ Error `Unexpected
+
+let rpop = omnidirectional_pop "RPOP"
+
+let lpop = omnidirectional_pop "LPOP"
 
 let with_connection ?(port = 6379) ~host f =
   let where = Tcp.Where_to_connect.of_host_and_port @@ Host_and_port.create ~host ~port in

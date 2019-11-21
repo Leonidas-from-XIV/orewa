@@ -53,6 +53,8 @@ val lpush
 
 val lpop : t -> string -> (string option, [> common_error | wrong_type]) Deferred.Result.t
 
+val rpop : t -> string -> (string option, [> common_error | wrong_type]) Deferred.Result.t
+
 val lrange
   :  t ->
   key:string ->

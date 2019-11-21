@@ -1033,14 +1033,33 @@ let test_lpop () =
   let key = random_key () in
   let not_list = random_key () in
   let element = random_key () in
+  let left_element = random_key () in
   let%bind res = Orewa.lpop conn key in
   Alcotest.(check soe) "Pop from empty key" (Ok None) res;
   let%bind _ = Orewa.set conn ~key:not_list "this is not a list" in
   let%bind res = Orewa.lpop conn not_list in
   Alcotest.(check soe) "Pop from not a list" (Error (`Wrong_type not_list)) res;
   let%bind _ = Orewa.lpush conn ~element key in
+  let%bind _ = Orewa.lpush conn ~element:left_element key in
   let%bind res = Orewa.lpop conn key in
-  Alcotest.(check soe) "Pop from existing list" (Ok (Some element)) res;
+  Alcotest.(check soe) "Pop from existing list" (Ok (Some left_element)) res;
+  return ()
+
+let test_rpop () =
+  Orewa.with_connection ~host @@ fun conn ->
+  let key = random_key () in
+  let not_list = random_key () in
+  let element = random_key () in
+  let right_element = random_key () in
+  let%bind res = Orewa.rpop conn key in
+  Alcotest.(check soe) "Pop from empty key" (Ok None) res;
+  let%bind _ = Orewa.set conn ~key:not_list "this is not a list" in
+  let%bind res = Orewa.rpop conn not_list in
+  Alcotest.(check soe) "Pop from not a list" (Error (`Wrong_type not_list)) res;
+  let%bind _ = Orewa.lpush conn ~element:right_element key in
+  let%bind _ = Orewa.lpush conn ~element key in
+  let%bind res = Orewa.rpop conn key in
+  Alcotest.(check soe) "Pop from existing list" (Ok (Some right_element)) res;
   return ()
 
 let test_lrem () =
@@ -1107,6 +1126,7 @@ let tests =
       test_case "SET with expiry" `Slow test_set_expiry;
       test_case "LPUSH" `Slow test_lpush;
       test_case "LPOP" `Slow test_lpop;
+      test_case "RPOP" `Slow test_rpop;
       test_case "LRANGE" `Slow test_lpush_lrange;
       test_case "LREM" `Slow test_lrem;
       test_case "LSET" `Slow test_lset;
