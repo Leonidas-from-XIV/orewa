@@ -1155,6 +1155,13 @@ let test_ltrim () =
   Alcotest.(check ie) "List is trimmed" (Ok 5) res;
   return ()
 
+let test_publish () =
+  Orewa.with_connection ~host @@ fun conn ->
+  let key = random_key () in
+  let%bind res = Orewa.publish conn ~channel:key "aaaa" in
+  Alcotest.(check (result int err)) "PUBLISH failed" (Ok 0) res;
+  return ()
+
 let tests =
   Alcotest_async.
     [ test_case "ECHO" `Slow test_echo;
@@ -1228,7 +1235,8 @@ let tests =
       test_case "CLOSE" `Slow test_close;
       test_case "LINSERT" `Slow test_linsert;
       test_case "LLEN" `Slow test_llen;
-      test_case "LINDEX" `Slow test_lindex ]
+      test_case "LINDEX" `Slow test_lindex;
+      test_case "PUBLISH" `Slow test_publish ]
 
 let () =
   Log.Global.set_level `Debug;
