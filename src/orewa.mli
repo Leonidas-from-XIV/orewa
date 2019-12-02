@@ -387,6 +387,8 @@ val hscan
   string ->
   (string * string) Pipe.Reader.t
 
+val publish : t -> channel:string -> string -> (int, [> common_error]) Deferred.Result.t
+
 val connect : ?port:int -> host:string -> t Deferred.t
 
 val close : t -> unit Deferred.t
