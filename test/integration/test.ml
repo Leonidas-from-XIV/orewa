@@ -1247,6 +1247,22 @@ let test_hdel () =
   Alcotest.(check ie) "Single delete from filled hashtable" (Ok 2) res;
   return ()
 
+let test_hexists () =
+  Orewa.with_connection ~host @@ fun conn ->
+  let key = random_key () in
+  let field = random_key () in
+  let value = random_key () in
+  let element = field, value in
+  let%bind res = Orewa.hexists conn ~field key in
+  Alcotest.(check be) "Asking for nonexisting field on missing key" (Ok false) res;
+  let%bind _ = Orewa.hset conn ~element key in
+  let%bind res = Orewa.hexists conn ~field key in
+  Alcotest.(check be) "Asking for existing key" (Ok true) res;
+  let%bind _ = Orewa.hdel conn ~field key in
+  let%bind res = Orewa.hexists conn ~field key in
+  Alcotest.(check be) "Asking for deleted key" (Ok false) res;
+  return ()
+
 let tests =
   Alcotest_async.
     [ test_case "ECHO" `Slow test_echo;
@@ -1325,7 +1341,8 @@ let tests =
       test_case "HGET" `Slow test_hget;
       test_case "HMGET" `Slow test_hmget;
       test_case "HGETALL" `Slow test_hgetall;
-      test_case "HDEL" `Slow test_hdel ]
+      test_case "HDEL" `Slow test_hdel;
+      test_case "HEXISTS" `Slow test_hexists ]
 
 let () =
   Log.Global.set_level `Debug;
