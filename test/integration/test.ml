@@ -1216,6 +1216,21 @@ let test_hmget () =
   Alcotest.(check sme) "Getting the value that was set" (Ok expected) res;
   return ()
 
+let test_hgetall () =
+  Orewa.with_connection ~host @@ fun conn ->
+  let key = random_key () in
+  let%bind res = Orewa.hgetall conn key in
+  let expected = String.Map.of_alist_exn [] in
+  Alcotest.(check sme) "Getting an empty map on empty key" (Ok expected) res;
+  let field = random_key () in
+  let value = random_key () in
+  let element = field, value in
+  let%bind _ = Orewa.hset conn ~element key in
+  let%bind res = Orewa.hgetall conn key in
+  let expected = String.Map.of_alist_exn [element] in
+  Alcotest.(check sme) "Getting a map of elements" (Ok expected) res;
+  return ()
+
 let tests =
   Alcotest_async.
     [ test_case "ECHO" `Slow test_echo;
@@ -1292,7 +1307,8 @@ let tests =
       test_case "LINDEX" `Slow test_lindex;
       test_case "HSET" `Slow test_hset;
       test_case "HGET" `Slow test_hget;
-      test_case "HMGET" `Slow test_hmget ]
+      test_case "HMGET" `Slow test_hmget;
+      test_case "HGETALL" `Slow test_hgetall ]
 
 let () =
   Log.Global.set_level `Debug;

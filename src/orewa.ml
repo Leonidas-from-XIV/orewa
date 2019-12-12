@@ -778,6 +778,24 @@ let hmget t ~fields key =
       | Unequal_lengths -> Deferred.return @@ Error `Unexpected)
   | _ -> Deferred.return @@ Error `Unexpected
 
+let hgetall t key =
+  let open Deferred.Result.Let_syntax in
+  match%bind request t ["HGETALL"; key] with
+  | Resp.Array xs -> (
+      let kvs =
+        xs
+        |> List.chunks_of ~length:2
+        |> List.map ~f:(function
+               | [Resp.Bulk key; Resp.Bulk value] -> Ok (key, value)
+               | _ -> Error `Unexpected)
+        |> Result.all
+      in
+      let%bind kvs = Deferred.return kvs in
+      match String.Map.of_alist kvs with
+      | `Ok t -> return t
+      | `Duplicate_key _ -> Deferred.return @@ Error `Unexpected)
+  | _ -> Deferred.return @@ Error `Unexpected
+
 let with_connection ?(port = 6379) ~host f =
   let where = Tcp.Where_to_connect.of_host_and_port @@ Host_and_port.create ~host ~port in
   Tcp.with_connection where @@ fun _socket reader writer ->
