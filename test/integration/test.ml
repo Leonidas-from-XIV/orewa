@@ -1228,6 +1228,25 @@ let test_hgetall () =
   Alcotest.(check sme) "Getting a map of elements" (Ok expected) res;
   return ()
 
+let test_hdel () =
+  Orewa.with_connection ~host @@ fun conn ->
+  let key = random_key () in
+  let field = random_key () in
+  let value = random_key () in
+  let element = field, value in
+  let%bind res = Orewa.hdel conn ~field key in
+  Alcotest.(check ie) "Deleting from empty hashtable" (Ok 0) res;
+  let field' = random_key () in
+  let element' = field', value in
+  let field'' = random_key () in
+  let element'' = field'', value in
+  let%bind _ = Orewa.hset conn ~element ~elements:[element'; element''] key in
+  let%bind res = Orewa.hdel conn ~field key in
+  Alcotest.(check ie) "Single delete from filled hashtable" (Ok 1) res;
+  let%bind res = Orewa.hdel conn ~field:field' ~fields:[field''] key in
+  Alcotest.(check ie) "Single delete from filled hashtable" (Ok 2) res;
+  return ()
+
 let tests =
   Alcotest_async.
     [ test_case "ECHO" `Slow test_echo;
@@ -1305,7 +1324,8 @@ let tests =
       test_case "HSET" `Slow test_hset;
       test_case "HGET" `Slow test_hget;
       test_case "HMGET" `Slow test_hmget;
-      test_case "HGETALL" `Slow test_hgetall ]
+      test_case "HGETALL" `Slow test_hgetall;
+      test_case "HDEL" `Slow test_hdel ]
 
 let () =
   Log.Global.set_level `Debug;
