@@ -34,6 +34,18 @@ let some_string = Alcotest.testable String.pp (const (const true))
 
 let bit = Alcotest.testable Orewa.pp_bit Orewa.equal_bit
 
+let colon = Fmt.any ":@, "
+
+let pp_binding = Fmt.(pair ~sep:colon Dump.string Dump.string)
+
+let smap_iter f m = String.Map.iteri m ~f:(fun ~key ~data -> f key data)
+
+let string_string_map_pp = Fmt.(braces (iter_bindings ~sep:comma smap_iter pp_binding))
+
+let sm = Alcotest.testable string_string_map_pp (String.Map.equal String.equal)
+
+let sme = Alcotest.(result sm err)
+
 let unordered_string_list =
   Alcotest.(
     testable
@@ -1189,6 +1201,21 @@ let test_hget () =
   Alcotest.(check se) "Getting the value that was set" (Ok value) res;
   return ()
 
+let test_hmget () =
+  Orewa.with_connection ~host @@ fun conn ->
+  let key = random_key () in
+  let field = random_key () in
+  let value = random_key () in
+  let element = field, value in
+  let%bind res = Orewa.hmget conn ~fields:[field] key in
+  let expected = String.Map.of_alist_exn [] in
+  Alcotest.(check sme) "Getting empty key" (Ok expected) res;
+  let%bind _ = Orewa.hset conn ~element key in
+  let%bind res = Orewa.hmget conn ~fields:[field] key in
+  let expected = String.Map.of_alist_exn [element] in
+  Alcotest.(check sme) "Getting the value that was set" (Ok expected) res;
+  return ()
+
 let tests =
   Alcotest_async.
     [ test_case "ECHO" `Slow test_echo;
@@ -1264,7 +1291,8 @@ let tests =
       test_case "LLEN" `Slow test_llen;
       test_case "LINDEX" `Slow test_lindex;
       test_case "HSET" `Slow test_hset;
-      test_case "HGET" `Slow test_hget ]
+      test_case "HGET" `Slow test_hget;
+      test_case "HMGET" `Slow test_hmget ]
 
 let () =
   Log.Global.set_level `Debug;

@@ -750,6 +750,34 @@ let hget t ~field key =
   | Resp.Bulk v -> return v
   | _ -> Deferred.return @@ Error `Unexpected
 
+let hmget t ~fields key =
+  let open Deferred.Result.Let_syntax in
+  match%bind request t (["HMGET"; key] @ fields) with
+  | Resp.Array xs -> (
+      let unpacked =
+        List.map2 fields xs ~f:(fun field ->
+          function
+          | Resp.Bulk v -> Ok (field, Some v)
+          | Resp.Null -> Ok (field, None)
+          | _ -> Error `Unexpected)
+      in
+      match unpacked with
+      | Ok matching -> (
+          match Result.all matching with
+          | Ok v -> (
+              let bindings =
+                List.filter_map v ~f:(fun (k, v) ->
+                    match v with
+                    | Some v -> Some (k, v)
+                    | None -> None)
+              in
+              match String.Map.of_alist bindings with
+              | `Ok t -> return t
+              | `Duplicate_key _ -> Deferred.return @@ Error `Unexpected)
+          | Error _ as e -> Deferred.return e)
+      | Unequal_lengths -> Deferred.return @@ Error `Unexpected)
+  | _ -> Deferred.return @@ Error `Unexpected
+
 let with_connection ?(port = 6379) ~host f =
   let where = Tcp.Where_to_connect.of_host_and_port @@ Host_and_port.create ~host ~port in
   Tcp.with_connection where @@ fun _socket reader writer ->

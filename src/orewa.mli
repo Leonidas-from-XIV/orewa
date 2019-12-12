@@ -341,6 +341,12 @@ val hset
 
 val hget : t -> field:string -> string -> (string, [> common_error]) Deferred.Result.t
 
+val hmget
+  :  t ->
+  fields:string list ->
+  string ->
+  (string String.Map.t, [> common_error]) Deferred.Result.t
+
 val connect : ?port:int -> host:string -> t Deferred.t
 
 val close : t -> unit Deferred.t
