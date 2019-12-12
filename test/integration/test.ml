@@ -34,9 +34,11 @@ let some_string = Alcotest.testable String.pp (const (const true))
 
 let bit = Alcotest.testable Orewa.pp_bit Orewa.equal_bit
 
-let colon = Fmt.any ":@, "
+let colon ppf _ = Fmt.pf ppf ":@, "
 
-let pp_binding = Fmt.(pair ~sep:colon Dump.string Dump.string)
+let dump_string ppf s = Fmt.pf ppf "%S" s
+
+let pp_binding = Fmt.(pair ~sep:colon dump_string dump_string)
 
 let smap_iter f m = String.Map.iteri m ~f:(fun ~key ~data -> f key data)
 
@@ -878,6 +880,11 @@ let test_renamenx () =
     res;
   return ()
 
+type sort_result =
+  [ `Count of int
+  | `Sorted of string list ]
+[@@deriving show, eq]
+
 let test_sort () =
   Orewa.with_connection ~host @@ fun conn ->
   let key = random_key () in
@@ -890,17 +897,7 @@ let test_sort () =
         return ())
   in
   let%bind res = Orewa.sort conn key in
-  let sort_result =
-    Alcotest.testable
-      (fun formatter v ->
-        let v =
-          match v with
-          | `Count n -> Printf.sprintf "`Count %d" n
-          | `Sorted xs -> Fmt.strf "`Sorted %a" Fmt.(list string) xs
-        in
-        Format.pp_print_text formatter v)
-      (fun a b -> a = b)
-  in
+  let sort_result = Alcotest.testable pp_sort_result equal_sort_result in
   let integer_sorted =
     randomly_ordered |> List.sort ~compare:Int.compare |> List.map ~f:string_of_int
   in
