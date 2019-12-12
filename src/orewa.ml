@@ -763,18 +763,16 @@ let hmget t ~fields key =
       in
       match unpacked with
       | Ok matching -> (
-          match Result.all matching with
-          | Ok v -> (
-              let bindings =
-                List.filter_map v ~f:(fun (k, v) ->
-                    match v with
-                    | Some v -> Some (k, v)
-                    | None -> None)
-              in
-              match String.Map.of_alist bindings with
-              | `Ok t -> return t
-              | `Duplicate_key _ -> Deferred.return @@ Error `Unexpected)
-          | Error _ as e -> Deferred.return e)
+          let%bind all_bindings = Deferred.return @@ Result.all matching in
+          let bound_bindings =
+            List.filter_map all_bindings ~f:(fun (k, v) ->
+                match v with
+                | Some v -> Some (k, v)
+                | None -> None)
+          in
+          match String.Map.of_alist bound_bindings with
+          | `Ok t -> return t
+          | `Duplicate_key _ -> Deferred.return @@ Error `Unexpected)
       | Unequal_lengths -> Deferred.return @@ Error `Unexpected)
   | _ -> Deferred.return @@ Error `Unexpected
 
