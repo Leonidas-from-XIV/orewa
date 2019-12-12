@@ -1178,6 +1178,17 @@ let test_hset () =
   Alcotest.(check ie) "Set multiple elements" (Ok 3) res;
   return ()
 
+let test_hget () =
+  Orewa.with_connection ~host @@ fun conn ->
+  let key = random_key () in
+  let field = random_key () in
+  let value = random_key () in
+  let element = field, value in
+  let%bind _ = Orewa.hset conn ~element key in
+  let%bind res = Orewa.hget conn ~field key in
+  Alcotest.(check se) "Getting the value that was set" (Ok value) res;
+  return ()
+
 let tests =
   Alcotest_async.
     [ test_case "ECHO" `Slow test_echo;
@@ -1252,7 +1263,8 @@ let tests =
       test_case "LINSERT" `Slow test_linsert;
       test_case "LLEN" `Slow test_llen;
       test_case "LINDEX" `Slow test_lindex;
-      test_case "HSET" `Slow test_hset ]
+      test_case "HSET" `Slow test_hset;
+      test_case "HGET" `Slow test_hget ]
 
 let () =
   Log.Global.set_level `Debug;
