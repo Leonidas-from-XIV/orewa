@@ -332,6 +332,13 @@ val ltrim
   string ->
   (unit, [> common_error]) Deferred.Result.t
 
+val hset
+  :  t ->
+  element:string * string ->
+  ?elements:(string * string) list ->
+  string ->
+  (int, [> common_error]) Deferred.Result.t
+
 val connect : ?port:int -> host:string -> t Deferred.t
 
 val close : t -> unit Deferred.t

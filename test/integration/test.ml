@@ -1155,6 +1155,29 @@ let test_ltrim () =
   Alcotest.(check ie) "List is trimmed" (Ok 5) res;
   return ()
 
+let test_hset () =
+  Orewa.with_connection ~host @@ fun conn ->
+  let key = random_key () in
+  let random_element () =
+    let field = random_key () in
+    let value = random_key () in
+    field, value
+  in
+  let element = random_element () in
+  let%bind res = Orewa.hset conn ~element key in
+  Alcotest.(check ie) "Set single element" (Ok 1) res;
+  let%bind res = Orewa.hset conn ~element key in
+  Alcotest.(check ie) "Resetting is no-op" (Ok 0) res;
+  let%bind res =
+    Orewa.hset
+      conn
+      ~element:(random_element ())
+      ~elements:[random_element (); random_element ()]
+      key
+  in
+  Alcotest.(check ie) "Set multiple elements" (Ok 3) res;
+  return ()
+
 let tests =
   Alcotest_async.
     [ test_case "ECHO" `Slow test_echo;
@@ -1228,7 +1251,8 @@ let tests =
       test_case "CLOSE" `Slow test_close;
       test_case "LINSERT" `Slow test_linsert;
       test_case "LLEN" `Slow test_llen;
-      test_case "LINDEX" `Slow test_lindex ]
+      test_case "LINDEX" `Slow test_lindex;
+      test_case "HSET" `Slow test_hset ]
 
 let () =
   Log.Global.set_level `Debug;
