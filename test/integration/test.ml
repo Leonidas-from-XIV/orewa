@@ -61,6 +61,18 @@ let unordered_string_list =
         let compare = String.compare in
         equal (List.sort ~compare a) (List.sort ~compare b)))
 
+type string_pair = string * string [@@deriving ord]
+
+let unordered_string_tuple_list =
+  Alcotest.(
+    testable
+      (pp (list (pair string string)))
+      (fun a b ->
+        let equal = equal (list (pair string string)) in
+        equal
+          (List.sort ~compare:compare_string_pair a)
+          (List.sort ~compare:compare_string_pair b)))
+
 let truncated_string_pp formatter str =
   let str = Printf.sprintf "%s(...)" (String.prefix str 10) in
   Format.pp_print_text formatter str
@@ -782,7 +794,6 @@ let test_sunionstore () =
 let test_sscan () =
   Orewa.with_connection ~host @@ fun conn ->
   let key = random_key () in
-  print_endline key;
   let count = 20 in
   let members =
     List.init count ~f:(fun i -> String.concat ~sep:":" ["mem"; string_of_int i])
@@ -1341,6 +1352,25 @@ let test_hstrlen () =
   Alcotest.(check ie) "Map with a field" (Ok (String.length value)) res;
   return ()
 
+let test_hscan () =
+  Orewa.with_connection ~host @@ fun conn ->
+  let key = random_key () in
+  let count = 20 in
+  let elements =
+    List.init count ~f:(fun i ->
+        String.concat ~sep:":" ["mem"; string_of_int i], random_key ())
+  in
+  let%bind _ = Orewa.hset conn key ~element:("dummy", "whatever") ~elements in
+  let pattern = "mem:*" in
+  let pipe = Orewa.hscan conn ~pattern ~count:4 key in
+  let%bind q = Pipe.read_all pipe in
+  let res = Queue.to_list q in
+  Alcotest.(check unordered_string_tuple_list)
+    "Returns the right key/value pairs"
+    elements
+    res;
+  return ()
+
 let tests =
   Alcotest_async.
     [ test_case "ECHO" `Slow test_echo;
@@ -1426,7 +1456,8 @@ let tests =
       test_case "HKEYS" `Slow test_hkeys;
       test_case "HVALS" `Slow test_hvals;
       test_case "HLEN" `Slow test_hlen;
-      test_case "HSTRLEN" `Slow test_hstrlen ]
+      test_case "HSTRLEN" `Slow test_hstrlen;
+      test_case "HSCAN" `Slow test_hscan ]
 
 let () =
   Log.Global.set_level `Debug;

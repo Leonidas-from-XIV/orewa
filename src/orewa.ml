@@ -573,6 +573,22 @@ let scan ?pattern ?count t = generic_scan t ?pattern ?count ["SCAN"]
 
 let sscan t ?pattern ?count key = generic_scan t ?pattern ?count ["SSCAN"; key]
 
+let hscan t ?pattern ?count key =
+  let reader = generic_scan t ?pattern ?count ["HSCAN"; key] in
+  Pipe.create_reader ~close_on_exception:true (fun writer ->
+      let transfer_one_binding () =
+        match%bind Pipe.read_exactly reader ~num_values:2 with
+        | `Eof -> return @@ `Finished (Pipe.close writer)
+        | `Fewer _ -> failwith "Unexpected protocol failure"
+        | `Exactly q ->
+            let field = Queue.get q 0 in
+            let value = Queue.get q 1 in
+            let binding = field, value in
+            let%bind () = Pipe.write writer binding in
+            return (`Repeat ())
+      in
+      Deferred.repeat_until_finished () transfer_one_binding)
+
 let move t key db =
   let open Deferred.Result.Let_syntax in
   match%bind request t ["MOVE"; key; string_of_int db] with
