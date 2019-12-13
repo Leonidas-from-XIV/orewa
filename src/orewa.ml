@@ -819,6 +819,18 @@ let hincrbyfloat t ~field key increment =
   | Resp.Bulk fl -> return @@ float_of_string fl
   | _ -> Deferred.return @@ Error `Unexpected
 
+let hkeys t key =
+  let open Deferred.Result.Let_syntax in
+  match%bind request t ["HKEYS"; key] with
+  | Resp.Array xs ->
+      let keys =
+        List.map xs ~f:(function
+            | Resp.Bulk x -> Ok x
+            | _ -> Error `Unexpected)
+      in
+      Deferred.return @@ Result.all keys
+  | _ -> Deferred.return @@ Error `Unexpected
+
 let with_connection ?(port = 6379) ~host f =
   let where = Tcp.Where_to_connect.of_host_and_port @@ Host_and_port.create ~host ~port in
   Tcp.with_connection where @@ fun _socket reader writer ->
