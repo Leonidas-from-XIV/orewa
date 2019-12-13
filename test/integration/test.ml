@@ -26,13 +26,31 @@ let be = Alcotest.(result bool err)
 
 let ie = Alcotest.(result int err)
 
+let fe = Alcotest.(result (float 0.01) err)
+
 let se = Alcotest.(result string err)
+
+let sle = Alcotest.(result (list string) err)
 
 let soe = Alcotest.(result (option string) err)
 
 let some_string = Alcotest.testable String.pp (const (const true))
 
 let bit = Alcotest.testable Orewa.pp_bit Orewa.equal_bit
+
+let colon ppf _ = Fmt.pf ppf ":@, "
+
+let dump_string ppf s = Fmt.pf ppf "%S" s
+
+let pp_binding = Fmt.(pair ~sep:colon dump_string dump_string)
+
+let smap_iter f m = String.Map.iteri m ~f:(fun ~key ~data -> f key data)
+
+let string_string_map_pp = Fmt.(braces (iter_bindings ~sep:comma smap_iter pp_binding))
+
+let sm = Alcotest.testable string_string_map_pp (String.Map.equal String.equal)
+
+let sme = Alcotest.(result sm err)
 
 let unordered_string_list =
   Alcotest.(
@@ -42,6 +60,18 @@ let unordered_string_list =
         let equal = equal (list string) in
         let compare = String.compare in
         equal (List.sort ~compare a) (List.sort ~compare b)))
+
+type string_pair = string * string [@@deriving ord]
+
+let unordered_string_tuple_list =
+  Alcotest.(
+    testable
+      (pp (list (pair string string)))
+      (fun a b ->
+        let equal = equal (list (pair string string)) in
+        equal
+          (List.sort ~compare:compare_string_pair a)
+          (List.sort ~compare:compare_string_pair b)))
 
 let truncated_string_pp formatter str =
   let str = Printf.sprintf "%s(...)" (String.prefix str 10) in
@@ -764,7 +794,6 @@ let test_sunionstore () =
 let test_sscan () =
   Orewa.with_connection ~host @@ fun conn ->
   let key = random_key () in
-  print_endline key;
   let count = 20 in
   let members =
     List.init count ~f:(fun i -> String.concat ~sep:":" ["mem"; string_of_int i])
@@ -866,6 +895,11 @@ let test_renamenx () =
     res;
   return ()
 
+type sort_result =
+  [ `Count of int
+  | `Sorted of string list ]
+[@@deriving show, eq]
+
 let test_sort () =
   Orewa.with_connection ~host @@ fun conn ->
   let key = random_key () in
@@ -878,17 +912,7 @@ let test_sort () =
         return ())
   in
   let%bind res = Orewa.sort conn key in
-  let sort_result =
-    Alcotest.testable
-      (fun formatter v ->
-        let v =
-          match v with
-          | `Count n -> Printf.sprintf "`Count %d" n
-          | `Sorted xs -> Fmt.strf "`Sorted %a" Fmt.(list string) xs
-        in
-        Format.pp_print_text formatter v)
-      (fun a b -> a = b)
-  in
+  let sort_result = Alcotest.testable pp_sort_result equal_sort_result in
   let integer_sorted =
     randomly_ordered |> List.sort ~compare:Int.compare |> List.map ~f:string_of_int
   in
@@ -1155,6 +1179,198 @@ let test_ltrim () =
   Alcotest.(check ie) "List is trimmed" (Ok 5) res;
   return ()
 
+let test_hset () =
+  Orewa.with_connection ~host @@ fun conn ->
+  let key = random_key () in
+  let random_element () =
+    let field = random_key () in
+    let value = random_key () in
+    field, value
+  in
+  let element = random_element () in
+  let%bind res = Orewa.hset conn ~element key in
+  Alcotest.(check ie) "Set single element" (Ok 1) res;
+  let%bind res = Orewa.hset conn ~element key in
+  Alcotest.(check ie) "Resetting is no-op" (Ok 0) res;
+  let%bind res =
+    Orewa.hset
+      conn
+      ~element:(random_element ())
+      ~elements:[random_element (); random_element ()]
+      key
+  in
+  Alcotest.(check ie) "Set multiple elements" (Ok 3) res;
+  return ()
+
+let test_hget () =
+  Orewa.with_connection ~host @@ fun conn ->
+  let key = random_key () in
+  let field = random_key () in
+  let value = random_key () in
+  let element = field, value in
+  let%bind _ = Orewa.hset conn ~element key in
+  let%bind res = Orewa.hget conn ~field key in
+  Alcotest.(check se) "Getting the value that was set" (Ok value) res;
+  return ()
+
+let test_hmget () =
+  Orewa.with_connection ~host @@ fun conn ->
+  let key = random_key () in
+  let field = random_key () in
+  let value = random_key () in
+  let element = field, value in
+  let%bind res = Orewa.hmget conn ~fields:[field] key in
+  let expected = String.Map.of_alist_exn [] in
+  Alcotest.(check sme) "Getting empty key" (Ok expected) res;
+  let%bind _ = Orewa.hset conn ~element key in
+  let%bind res = Orewa.hmget conn ~fields:[field] key in
+  let expected = String.Map.of_alist_exn [element] in
+  Alcotest.(check sme) "Getting the value that was set" (Ok expected) res;
+  return ()
+
+let test_hgetall () =
+  Orewa.with_connection ~host @@ fun conn ->
+  let key = random_key () in
+  let%bind res = Orewa.hgetall conn key in
+  let expected = String.Map.of_alist_exn [] in
+  Alcotest.(check sme) "Getting an empty map on empty key" (Ok expected) res;
+  let field = random_key () in
+  let value = random_key () in
+  let element = field, value in
+  let%bind _ = Orewa.hset conn ~element key in
+  let%bind res = Orewa.hgetall conn key in
+  let expected = String.Map.of_alist_exn [element] in
+  Alcotest.(check sme) "Getting a map of elements" (Ok expected) res;
+  return ()
+
+let test_hdel () =
+  Orewa.with_connection ~host @@ fun conn ->
+  let key = random_key () in
+  let field = random_key () in
+  let value = random_key () in
+  let element = field, value in
+  let%bind res = Orewa.hdel conn ~field key in
+  Alcotest.(check ie) "Deleting from empty hashtable" (Ok 0) res;
+  let field' = random_key () in
+  let element' = field', value in
+  let field'' = random_key () in
+  let element'' = field'', value in
+  let%bind _ = Orewa.hset conn ~element ~elements:[element'; element''] key in
+  let%bind res = Orewa.hdel conn ~field key in
+  Alcotest.(check ie) "Single delete from filled hashtable" (Ok 1) res;
+  let%bind res = Orewa.hdel conn ~field:field' ~fields:[field''] key in
+  Alcotest.(check ie) "Single delete from filled hashtable" (Ok 2) res;
+  return ()
+
+let test_hexists () =
+  Orewa.with_connection ~host @@ fun conn ->
+  let key = random_key () in
+  let field = random_key () in
+  let value = random_key () in
+  let element = field, value in
+  let%bind res = Orewa.hexists conn ~field key in
+  Alcotest.(check be) "Asking for nonexisting field on missing key" (Ok false) res;
+  let%bind _ = Orewa.hset conn ~element key in
+  let%bind res = Orewa.hexists conn ~field key in
+  Alcotest.(check be) "Asking for existing key" (Ok true) res;
+  let%bind _ = Orewa.hdel conn ~field key in
+  let%bind res = Orewa.hexists conn ~field key in
+  Alcotest.(check be) "Asking for deleted key" (Ok false) res;
+  return ()
+
+let test_hincrby () =
+  Orewa.with_connection ~host @@ fun conn ->
+  let key = random_key () in
+  let field = random_key () in
+  let value = 42 in
+  let%bind res = Orewa.hincrby conn ~field key value in
+  Alcotest.(check ie) "Incrementing missing key" (Ok value) res;
+  let%bind res = Orewa.hincrby conn ~field key value in
+  Alcotest.(check ie) "Incrementing existing key" (Ok (2 * value)) res;
+  return ()
+
+let test_hincrbyfloat () =
+  Orewa.with_connection ~host @@ fun conn ->
+  let key = random_key () in
+  let field = random_key () in
+  let value = 42. in
+  let%bind res = Orewa.hincrbyfloat conn ~field key value in
+  Alcotest.(check fe) "Incrementing missing key" (Ok value) res;
+  let%bind res = Orewa.hincrbyfloat conn ~field key value in
+  Alcotest.(check fe) "Incrementing existing key" (Ok Float.(2. * value)) res;
+  return ()
+
+let test_hkeys () =
+  Orewa.with_connection ~host @@ fun conn ->
+  let key = random_key () in
+  let field = random_key () in
+  let value = random_key () in
+  let element = field, value in
+  let%bind res = Orewa.hkeys conn key in
+  Alcotest.(check sle) "Empty hash map" (Ok []) res;
+  let%bind _ = Orewa.hset conn ~element key in
+  let%bind res = Orewa.hkeys conn key in
+  Alcotest.(check sle) "Enumerating existing key" (Ok [field]) res;
+  return ()
+
+let test_hvals () =
+  Orewa.with_connection ~host @@ fun conn ->
+  let key = random_key () in
+  let field = random_key () in
+  let value = random_key () in
+  let element = field, value in
+  let%bind res = Orewa.hvals conn key in
+  Alcotest.(check sle) "Empty hash map" (Ok []) res;
+  let%bind _ = Orewa.hset conn ~element key in
+  let%bind res = Orewa.hvals conn key in
+  Alcotest.(check sle) "Enumerating existing key" (Ok [value]) res;
+  return ()
+
+let test_hlen () =
+  Orewa.with_connection ~host @@ fun conn ->
+  let key = random_key () in
+  let field = random_key () in
+  let value = random_key () in
+  let element = field, value in
+  let%bind res = Orewa.hlen conn key in
+  Alcotest.(check ie) "Empty hash map" (Ok 0) res;
+  let%bind _ = Orewa.hset conn ~element key in
+  let%bind res = Orewa.hlen conn key in
+  Alcotest.(check ie) "Map with fields" (Ok 1) res;
+  return ()
+
+let test_hstrlen () =
+  Orewa.with_connection ~host @@ fun conn ->
+  let key = random_key () in
+  let field = random_key () in
+  let value = random_key () in
+  let element = field, value in
+  let%bind res = Orewa.hstrlen conn ~field key in
+  Alcotest.(check ie) "Empty hash map" (Ok 0) res;
+  let%bind _ = Orewa.hset conn ~element key in
+  let%bind res = Orewa.hstrlen conn ~field key in
+  Alcotest.(check ie) "Map with a field" (Ok (String.length value)) res;
+  return ()
+
+let test_hscan () =
+  Orewa.with_connection ~host @@ fun conn ->
+  let key = random_key () in
+  let count = 20 in
+  let elements =
+    List.init count ~f:(fun i ->
+        String.concat ~sep:":" ["mem"; string_of_int i], random_key ())
+  in
+  let%bind _ = Orewa.hset conn key ~element:("dummy", "whatever") ~elements in
+  let pattern = "mem:*" in
+  let pipe = Orewa.hscan conn ~pattern ~count:4 key in
+  let%bind q = Pipe.read_all pipe in
+  let res = Queue.to_list q in
+  Alcotest.(check unordered_string_tuple_list)
+    "Returns the right key/value pairs"
+    elements
+    res;
+  return ()
+
 let tests =
   Alcotest_async.
     [ test_case "ECHO" `Slow test_echo;
@@ -1228,7 +1444,20 @@ let tests =
       test_case "CLOSE" `Slow test_close;
       test_case "LINSERT" `Slow test_linsert;
       test_case "LLEN" `Slow test_llen;
-      test_case "LINDEX" `Slow test_lindex ]
+      test_case "LINDEX" `Slow test_lindex;
+      test_case "HSET" `Slow test_hset;
+      test_case "HGET" `Slow test_hget;
+      test_case "HMGET" `Slow test_hmget;
+      test_case "HGETALL" `Slow test_hgetall;
+      test_case "HDEL" `Slow test_hdel;
+      test_case "HEXISTS" `Slow test_hexists;
+      test_case "HINCRBY" `Slow test_hincrby;
+      test_case "HINCRBYFLOAT" `Slow test_hincrbyfloat;
+      test_case "HKEYS" `Slow test_hkeys;
+      test_case "HVALS" `Slow test_hvals;
+      test_case "HLEN" `Slow test_hlen;
+      test_case "HSTRLEN" `Slow test_hstrlen;
+      test_case "HSCAN" `Slow test_hscan ]
 
 let () =
   Log.Global.set_level `Debug;

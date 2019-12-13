@@ -16,8 +16,9 @@
     (core (>= v0.11))
     (dune (>= 1.10))
     (ppx_let (>= v0.11))
-    (alcotest (and :with_test (>= 0.8.4)))
-    (alcotest-async (and :with_test (>= 0.8.2)))
+    (alcotest (and :with-test (>= 0.8.4)))
+    (alcotest-async (and :with-test (>= 0.8.2)))
+    (fmt (and :with-test (>= 0.8.6)))
     (ppx_deriving (>= 4.2)))
   (synopsis "Async-friendly Redis client")
   (description "Async-friendly Redis client

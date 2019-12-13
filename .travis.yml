@@ -12,7 +12,7 @@ env:
   global:
     - PACKAGE=orewa
     - TESTS=true
-    - POST_INSTALL_HOOK="opam install alcotest alcotest-async && make integration"
+    - POST_INSTALL_HOOK="opam reinstall --with-test orewa && make integration"
   matrix:
     - OCAML_VERSION=4.04
     - OCAML_VERSION=4.05

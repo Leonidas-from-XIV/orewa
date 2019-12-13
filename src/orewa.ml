@@ -573,6 +573,22 @@ let scan ?pattern ?count t = generic_scan t ?pattern ?count ["SCAN"]
 
 let sscan t ?pattern ?count key = generic_scan t ?pattern ?count ["SSCAN"; key]
 
+let hscan t ?pattern ?count key =
+  let reader = generic_scan t ?pattern ?count ["HSCAN"; key] in
+  Pipe.create_reader ~close_on_exception:true (fun writer ->
+      let transfer_one_binding () =
+        match%bind Pipe.read_exactly reader ~num_values:2 with
+        | `Eof -> return @@ `Finished (Pipe.close writer)
+        | `Fewer _ -> failwith "Unexpected protocol failure"
+        | `Exactly q ->
+            let field = Queue.get q 0 in
+            let value = Queue.get q 1 in
+            let binding = field, value in
+            let%bind () = Pipe.write writer binding in
+            return (`Repeat ())
+      in
+      Deferred.repeat_until_finished () transfer_one_binding)
+
 let move t key db =
   let open Deferred.Result.Let_syntax in
   match%bind request t ["MOVE"; key; string_of_int db] with
@@ -734,6 +750,118 @@ let omnidirectional_pop command t key =
 let rpop = omnidirectional_pop "RPOP"
 
 let lpop = omnidirectional_pop "LPOP"
+
+let hset t ~element ?(elements = []) key =
+  let open Deferred.Result.Let_syntax in
+  let field_values =
+    element :: elements |> List.map ~f:(fun (f, v) -> [f; v]) |> List.concat
+  in
+  match%bind request t (["HSET"; key] @ field_values) with
+  | Resp.Integer n -> return n
+  | _ -> Deferred.return @@ Error `Unexpected
+
+let hget t ~field key =
+  let open Deferred.Result.Let_syntax in
+  match%bind request t ["HGET"; key; field] with
+  | Resp.Bulk v -> return v
+  | _ -> Deferred.return @@ Error `Unexpected
+
+let hmget t ~fields key =
+  let open Deferred.Result.Let_syntax in
+  match%bind request t (["HMGET"; key] @ fields) with
+  | Resp.Array xs -> (
+      let unpacked =
+        List.map2 fields xs ~f:(fun field ->
+          function
+          | Resp.Bulk v -> Ok (field, Some v)
+          | Resp.Null -> Ok (field, None)
+          | _ -> Error `Unexpected)
+      in
+      match unpacked with
+      | Ok matching -> (
+          let%bind all_bindings = Deferred.return @@ Result.all matching in
+          let bound_bindings =
+            List.filter_map all_bindings ~f:(fun (k, v) ->
+                match v with
+                | Some v -> Some (k, v)
+                | None -> None)
+          in
+          match String.Map.of_alist bound_bindings with
+          | `Ok t -> return t
+          | `Duplicate_key _ -> Deferred.return @@ Error `Unexpected)
+      | Unequal_lengths -> Deferred.return @@ Error `Unexpected)
+  | _ -> Deferred.return @@ Error `Unexpected
+
+let hgetall t key =
+  let open Deferred.Result.Let_syntax in
+  match%bind request t ["HGETALL"; key] with
+  | Resp.Array xs -> (
+      let kvs =
+        xs
+        |> List.chunks_of ~length:2
+        |> List.map ~f:(function
+               | [Resp.Bulk key; Resp.Bulk value] -> Ok (key, value)
+               | _ -> Error `Unexpected)
+        |> Result.all
+      in
+      let%bind kvs = Deferred.return kvs in
+      match String.Map.of_alist kvs with
+      | `Ok t -> return t
+      | `Duplicate_key _ -> Deferred.return @@ Error `Unexpected)
+  | _ -> Deferred.return @@ Error `Unexpected
+
+let hdel t ?(fields = []) ~field key =
+  let open Deferred.Result.Let_syntax in
+  match%bind request t (["HDEL"; key; field] @ fields) with
+  | Resp.Integer n -> return n
+  | _ -> Deferred.return @@ Error `Unexpected
+
+let hexists t ~field key =
+  let open Deferred.Result.Let_syntax in
+  match%bind request t ["HEXISTS"; key; field] with
+  | Resp.Integer 1 -> return true
+  | Resp.Integer 0 -> return false
+  | _ -> Deferred.return @@ Error `Unexpected
+
+let hincrby t ~field key increment =
+  let open Deferred.Result.Let_syntax in
+  match%bind request t ["HINCRBY"; key; field; string_of_int increment] with
+  | Resp.Integer n -> return n
+  | _ -> Deferred.return @@ Error `Unexpected
+
+let hincrbyfloat t ~field key increment =
+  let open Deferred.Result.Let_syntax in
+  match%bind request t ["HINCRBYFLOAT"; key; field; string_of_float increment] with
+  | Resp.Bulk fl -> return @@ float_of_string fl
+  | _ -> Deferred.return @@ Error `Unexpected
+
+let generic_keyvals command t key =
+  let open Deferred.Result.Let_syntax in
+  match%bind request t [command; key] with
+  | Resp.Array xs ->
+      let keys =
+        List.map xs ~f:(function
+            | Resp.Bulk x -> Ok x
+            | _ -> Error `Unexpected)
+      in
+      Deferred.return @@ Result.all keys
+  | _ -> Deferred.return @@ Error `Unexpected
+
+let hkeys = generic_keyvals "HKEYS"
+
+let hvals = generic_keyvals "HVALS"
+
+let hlen t key =
+  let open Deferred.Result.Let_syntax in
+  match%bind request t ["HLEN"; key] with
+  | Resp.Integer n -> return n
+  | _ -> Deferred.return @@ Error `Unexpected
+
+let hstrlen t ~field key =
+  let open Deferred.Result.Let_syntax in
+  match%bind request t ["HSTRLEN"; key; field] with
+  | Resp.Integer n -> return n
+  | _ -> Deferred.return @@ Error `Unexpected
 
 let with_connection ?(port = 6379) ~host f =
   let where = Tcp.Where_to_connect.of_host_and_port @@ Host_and_port.create ~host ~port in

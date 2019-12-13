@@ -332,6 +332,61 @@ val ltrim
   string ->
   (unit, [> common_error]) Deferred.Result.t
 
+val hset
+  :  t ->
+  element:string * string ->
+  ?elements:(string * string) list ->
+  string ->
+  (int, [> common_error]) Deferred.Result.t
+
+val hget : t -> field:string -> string -> (string, [> common_error]) Deferred.Result.t
+
+val hmget
+  :  t ->
+  fields:string list ->
+  string ->
+  (string String.Map.t, [> common_error]) Deferred.Result.t
+
+val hgetall : t -> string -> (string String.Map.t, [> common_error]) Deferred.Result.t
+
+val hdel
+  :  t ->
+  ?fields:string list ->
+  field:string ->
+  string ->
+  (int, [> common_error]) Deferred.Result.t
+
+val hexists : t -> field:string -> string -> (bool, [> common_error]) Deferred.Result.t
+
+val hincrby
+  :  t ->
+  field:string ->
+  string ->
+  int ->
+  (int, [> common_error]) Deferred.Result.t
+
+val hincrbyfloat
+  :  t ->
+  field:string ->
+  string ->
+  float ->
+  (float, [> common_error]) Deferred.Result.t
+
+val hkeys : t -> string -> (string list, [> common_error]) Deferred.Result.t
+
+val hvals : t -> string -> (string list, [> common_error]) Deferred.Result.t
+
+val hlen : t -> string -> (int, [> common_error]) Deferred.Result.t
+
+val hstrlen : t -> field:string -> string -> (int, [> common_error]) Deferred.Result.t
+
+val hscan
+  :  t ->
+  ?pattern:string ->
+  ?count:int ->
+  string ->
+  (string * string) Pipe.Reader.t
+
 val connect : ?port:int -> host:string -> t Deferred.t
 
 val close : t -> unit Deferred.t
