@@ -831,6 +831,12 @@ let hkeys t key =
       Deferred.return @@ Result.all keys
   | _ -> Deferred.return @@ Error `Unexpected
 
+let hlen t key =
+  let open Deferred.Result.Let_syntax in
+  match%bind request t ["HLEN"; key] with
+  | Resp.Integer n -> return n
+  | _ -> Deferred.return @@ Error `Unexpected
+
 let with_connection ?(port = 6379) ~host f =
   let where = Tcp.Where_to_connect.of_host_and_port @@ Host_and_port.create ~host ~port in
   Tcp.with_connection where @@ fun _socket reader writer ->

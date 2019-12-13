@@ -374,6 +374,8 @@ val hincrbyfloat
 
 val hkeys : t -> string -> (string list, [> common_error]) Deferred.Result.t
 
+val hlen : t -> string -> (int, [> common_error]) Deferred.Result.t
+
 val connect : ?port:int -> host:string -> t Deferred.t
 
 val close : t -> unit Deferred.t
