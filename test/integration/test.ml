@@ -1371,6 +1371,13 @@ let test_hscan () =
     res;
   return ()
 
+let test_publish () =
+  Orewa.with_connection ~host @@ fun conn ->
+  let key = random_key () in
+  let%bind res = Orewa.publish conn ~channel:key "aaaa" in
+  Alcotest.(check ie) "PUBLISH failed" (Ok 0) res;
+  return ()
+
 let tests =
   Alcotest_async.
     [ test_case "ECHO" `Slow test_echo;
@@ -1457,7 +1464,8 @@ let tests =
       test_case "HVALS" `Slow test_hvals;
       test_case "HLEN" `Slow test_hlen;
       test_case "HSTRLEN" `Slow test_hstrlen;
-      test_case "HSCAN" `Slow test_hscan ]
+      test_case "HSCAN" `Slow test_hscan;
+      test_case "PUBLISH" `Slow test_publish ]
 
 let () =
   Log.Global.set_level `Debug;
