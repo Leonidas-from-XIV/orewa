@@ -1315,6 +1315,19 @@ let test_hlen () =
   Alcotest.(check ie) "Map with fields" (Ok 1) res;
   return ()
 
+let test_hstrlen () =
+  Orewa.with_connection ~host @@ fun conn ->
+  let key = random_key () in
+  let field = random_key () in
+  let value = random_key () in
+  let element = field, value in
+  let%bind res = Orewa.hstrlen conn ~field key in
+  Alcotest.(check ie) "Empty hash map" (Ok 0) res;
+  let%bind _ = Orewa.hset conn ~element key in
+  let%bind res = Orewa.hstrlen conn ~field key in
+  Alcotest.(check ie) "Map with a field" (Ok (String.length value)) res;
+  return ()
+
 let tests =
   Alcotest_async.
     [ test_case "ECHO" `Slow test_echo;
@@ -1398,7 +1411,8 @@ let tests =
       test_case "HINCRBY" `Slow test_hincrby;
       test_case "HINCRBYFLOAT" `Slow test_hincrbyfloat;
       test_case "HKEYS" `Slow test_hkeys;
-      test_case "HLEN" `Slow test_hlen ]
+      test_case "HLEN" `Slow test_hlen;
+      test_case "HSTRLEN" `Slow test_hstrlen ]
 
 let () =
   Log.Global.set_level `Debug;
