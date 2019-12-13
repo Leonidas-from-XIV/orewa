@@ -819,9 +819,9 @@ let hincrbyfloat t ~field key increment =
   | Resp.Bulk fl -> return @@ float_of_string fl
   | _ -> Deferred.return @@ Error `Unexpected
 
-let hkeys t key =
+let generic_keyvals command t key =
   let open Deferred.Result.Let_syntax in
-  match%bind request t ["HKEYS"; key] with
+  match%bind request t [command; key] with
   | Resp.Array xs ->
       let keys =
         List.map xs ~f:(function
@@ -830,6 +830,10 @@ let hkeys t key =
       in
       Deferred.return @@ Result.all keys
   | _ -> Deferred.return @@ Error `Unexpected
+
+let hkeys = generic_keyvals "HKEYS"
+
+let hvals = generic_keyvals "HVALS"
 
 let hlen t key =
   let open Deferred.Result.Let_syntax in

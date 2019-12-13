@@ -1302,6 +1302,19 @@ let test_hkeys () =
   Alcotest.(check sle) "Enumerating existing key" (Ok [field]) res;
   return ()
 
+let test_hvals () =
+  Orewa.with_connection ~host @@ fun conn ->
+  let key = random_key () in
+  let field = random_key () in
+  let value = random_key () in
+  let element = field, value in
+  let%bind res = Orewa.hvals conn key in
+  Alcotest.(check sle) "Empty hash map" (Ok []) res;
+  let%bind _ = Orewa.hset conn ~element key in
+  let%bind res = Orewa.hvals conn key in
+  Alcotest.(check sle) "Enumerating existing key" (Ok [value]) res;
+  return ()
+
 let test_hlen () =
   Orewa.with_connection ~host @@ fun conn ->
   let key = random_key () in
@@ -1411,6 +1424,7 @@ let tests =
       test_case "HINCRBY" `Slow test_hincrby;
       test_case "HINCRBYFLOAT" `Slow test_hincrbyfloat;
       test_case "HKEYS" `Slow test_hkeys;
+      test_case "HVALS" `Slow test_hvals;
       test_case "HLEN" `Slow test_hlen;
       test_case "HSTRLEN" `Slow test_hstrlen ]
 
