@@ -1263,6 +1263,17 @@ let test_hexists () =
   Alcotest.(check be) "Asking for deleted key" (Ok false) res;
   return ()
 
+let test_hincrby () =
+  Orewa.with_connection ~host @@ fun conn ->
+  let key = random_key () in
+  let field = random_key () in
+  let value = 42 in
+  let%bind res = Orewa.hincrby conn ~field key value in
+  Alcotest.(check ie) "Incrementing missing key" (Ok value) res;
+  let%bind res = Orewa.hincrby conn ~field key value in
+  Alcotest.(check ie) "Incrementing existing key" (Ok (2 * value)) res;
+  return ()
+
 let tests =
   Alcotest_async.
     [ test_case "ECHO" `Slow test_echo;
@@ -1342,7 +1353,8 @@ let tests =
       test_case "HMGET" `Slow test_hmget;
       test_case "HGETALL" `Slow test_hgetall;
       test_case "HDEL" `Slow test_hdel;
-      test_case "HEXISTS" `Slow test_hexists ]
+      test_case "HEXISTS" `Slow test_hexists;
+      test_case "HINCRBY" `Slow test_hincrby ]
 
 let () =
   Log.Global.set_level `Debug;

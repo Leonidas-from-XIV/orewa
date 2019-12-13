@@ -358,6 +358,13 @@ val hdel
 
 val hexists : t -> field:string -> string -> (bool, [> common_error]) Deferred.Result.t
 
+val hincrby
+  :  t ->
+  field:string ->
+  string ->
+  int ->
+  (int, [> common_error]) Deferred.Result.t
+
 val connect : ?port:int -> host:string -> t Deferred.t
 
 val close : t -> unit Deferred.t
