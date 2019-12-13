@@ -365,6 +365,13 @@ val hincrby
   int ->
   (int, [> common_error]) Deferred.Result.t
 
+val hincrbyfloat
+  :  t ->
+  field:string ->
+  string ->
+  float ->
+  (float, [> common_error]) Deferred.Result.t
+
 val connect : ?port:int -> host:string -> t Deferred.t
 
 val close : t -> unit Deferred.t

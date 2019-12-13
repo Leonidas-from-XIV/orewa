@@ -26,6 +26,8 @@ let be = Alcotest.(result bool err)
 
 let ie = Alcotest.(result int err)
 
+let fe = Alcotest.(result (float 0.01) err)
+
 let se = Alcotest.(result string err)
 
 let soe = Alcotest.(result (option string) err)
@@ -1274,6 +1276,17 @@ let test_hincrby () =
   Alcotest.(check ie) "Incrementing existing key" (Ok (2 * value)) res;
   return ()
 
+let test_hincrbyfloat () =
+  Orewa.with_connection ~host @@ fun conn ->
+  let key = random_key () in
+  let field = random_key () in
+  let value = 42. in
+  let%bind res = Orewa.hincrbyfloat conn ~field key value in
+  Alcotest.(check fe) "Incrementing missing key" (Ok value) res;
+  let%bind res = Orewa.hincrbyfloat conn ~field key value in
+  Alcotest.(check fe) "Incrementing existing key" (Ok Float.(2. * value)) res;
+  return ()
+
 let tests =
   Alcotest_async.
     [ test_case "ECHO" `Slow test_echo;
@@ -1354,7 +1367,8 @@ let tests =
       test_case "HGETALL" `Slow test_hgetall;
       test_case "HDEL" `Slow test_hdel;
       test_case "HEXISTS" `Slow test_hexists;
-      test_case "HINCRBY" `Slow test_hincrby ]
+      test_case "HINCRBY" `Slow test_hincrby;
+      test_case "HINCRBYFLOAT" `Slow test_hincrbyfloat ]
 
 let () =
   Log.Global.set_level `Debug;

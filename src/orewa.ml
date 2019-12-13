@@ -813,6 +813,12 @@ let hincrby t ~field key increment =
   | Resp.Integer n -> return n
   | _ -> Deferred.return @@ Error `Unexpected
 
+let hincrbyfloat t ~field key increment =
+  let open Deferred.Result.Let_syntax in
+  match%bind request t ["HINCRBYFLOAT"; key; field; string_of_float increment] with
+  | Resp.Bulk fl -> return @@ float_of_string fl
+  | _ -> Deferred.return @@ Error `Unexpected
+
 let with_connection ?(port = 6379) ~host f =
   let where = Tcp.Where_to_connect.of_host_and_port @@ Host_and_port.create ~host ~port in
   Tcp.with_connection where @@ fun _socket reader writer ->
