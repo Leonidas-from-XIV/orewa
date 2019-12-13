@@ -1375,7 +1375,7 @@ let test_publish () =
   Orewa.with_connection ~host @@ fun conn ->
   let key = random_key () in
   let%bind res = Orewa.publish conn ~channel:key "aaaa" in
-  Alcotest.(check (result int err)) "PUBLISH failed" (Ok 0) res;
+  Alcotest.(check ie) "PUBLISH failed" (Ok 0) res;
   return ()
 
 let tests =
