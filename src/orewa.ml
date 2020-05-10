@@ -168,14 +168,14 @@ let msetnx t alist =
 
 let is_wrong_type msg = String.is_prefix msg ~prefix:"WRONGTYPE"
 
-let omnidirectional_push command t ?(exist = `Always) ~element ?(elements = []) key =
+let omnidirectional_push command t ?(exist = `Always) ~elements key =
   let open Deferred.Result.Let_syntax in
   let command =
     match exist with
     | `Always -> command
     | `Only_if_exists -> Printf.sprintf "%sX" command
   in
-  match%bind request t ([command; key; element] @ elements) with
+  match%bind request t ([command; key] @ elements) with
   | Resp.Integer n -> return n
   | Resp.Error e when is_wrong_type e -> Deferred.return (Error (`Wrong_type key))
   | _ -> Deferred.return @@ Error `Unexpected
@@ -751,11 +751,9 @@ let rpop = omnidirectional_pop "RPOP"
 
 let lpop = omnidirectional_pop "LPOP"
 
-let hset t ~element ?(elements = []) key =
+let hset t ~elements key =
   let open Deferred.Result.Let_syntax in
-  let field_values =
-    element :: elements |> List.map ~f:(fun (f, v) -> [f; v]) |> List.concat
-  in
+  let field_values = elements |> List.map ~f:(fun (f, v) -> [f; v]) |> List.concat in
   match%bind request t (["HSET"; key] @ field_values) with
   | Resp.Integer n -> return n
   | _ -> Deferred.return @@ Error `Unexpected
