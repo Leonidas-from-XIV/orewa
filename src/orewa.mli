@@ -347,6 +347,12 @@ val hmget
   string ->
   (string String.Map.t, [> common_error]) Deferred.Result.t
 
+val hmgetl
+  :  t ->
+  fields:string list ->
+  string ->
+  (string option list, [> common_error]) Deferred.Result.t
+
 val hgetall : t -> string -> (string String.Map.t, [> common_error]) Deferred.Result.t
 
 val hdel

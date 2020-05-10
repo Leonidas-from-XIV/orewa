@@ -32,6 +32,8 @@ let se = Alcotest.(result string err)
 
 let sle = Alcotest.(result (list string) err)
 
+let sole = Alcotest.(result (list (option string)) err)
+
 let soe = Alcotest.(result (option string) err)
 
 let some_string = Alcotest.testable String.pp (const (const true))
@@ -1228,6 +1230,20 @@ let test_hmget () =
   Alcotest.(check sme) "Getting the value that was set" (Ok expected) res;
   return ()
 
+let test_hmgetl () =
+  Orewa.with_connection ~host @@ fun conn ->
+  let key = random_key () in
+  let field1 = random_key () in
+  let value1 = random_key () in
+  let field2 = random_key () in
+  let value2 = random_key () in
+  let field3 = random_key () in
+  let%bind _ = Orewa.hset conn ~element:(field1, value1) ~elements:[field2, value2] key in
+  let%bind res = Orewa.hmgetl conn ~fields:[field1; field2; field3] key in
+  let expected = [Some value1; Some value2; None] in
+  Alcotest.(check sole) "Getting the value that was set" (Ok expected) res;
+  return ()
+
 let test_hgetall () =
   Orewa.with_connection ~host @@ fun conn ->
   let key = random_key () in
@@ -1455,6 +1471,7 @@ let tests =
       test_case "HSET" `Slow test_hset;
       test_case "HGET" `Slow test_hget;
       test_case "HMGET" `Slow test_hmget;
+      test_case "HMGETL" `Slow test_hmgetl;
       test_case "HGETALL" `Slow test_hgetall;
       test_case "HDEL" `Slow test_hdel;
       test_case "HEXISTS" `Slow test_hexists;
@@ -1467,6 +1484,8 @@ let tests =
       test_case "HSCAN" `Slow test_hscan;
       test_case "PUBLISH" `Slow test_publish ]
 
+let run () = Alcotest_async.run Caml.__MODULE__ ["integration", tests]
+
 let () =
   Log.Global.set_level `Debug;
-  Alcotest.run Caml.__MODULE__ ["integration", tests]
+  Thread_safe.block_on_async_exn run
