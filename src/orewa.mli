@@ -46,16 +46,14 @@ val msetnx : t -> (string * string) list -> (bool, [> common_error]) Deferred.Re
 val lpush
   :  t ->
   ?exist:[`Always | `Only_if_exists] ->
-  element:string ->
-  ?elements:string list ->
+  elements:string list ->
   string ->
   (int, [> common_error | wrong_type]) Deferred.Result.t
 
 val rpush
   :  t ->
   ?exist:[`Always | `Only_if_exists] ->
-  element:string ->
-  ?elements:string list ->
+  elements:string list ->
   string ->
   (int, [> common_error | wrong_type]) Deferred.Result.t
 
@@ -334,8 +332,7 @@ val ltrim
 
 val hset
   :  t ->
-  element:string * string ->
-  ?elements:(string * string) list ->
+  elements:(string * string) list ->
   string ->
   (int, [> common_error]) Deferred.Result.t
 
@@ -346,6 +343,12 @@ val hmget
   fields:string list ->
   string ->
   (string String.Map.t, [> common_error]) Deferred.Result.t
+
+val hmgetl
+  :  t ->
+  fields:string list ->
+  string ->
+  (string option list, [> common_error]) Deferred.Result.t
 
 val hgetall : t -> string -> (string String.Map.t, [> common_error]) Deferred.Result.t
 

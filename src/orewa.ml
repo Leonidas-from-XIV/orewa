@@ -168,14 +168,14 @@ let msetnx t alist =
 
 let is_wrong_type msg = String.is_prefix msg ~prefix:"WRONGTYPE"
 
-let omnidirectional_push command t ?(exist = `Always) ~element ?(elements = []) key =
+let omnidirectional_push command t ?(exist = `Always) ~elements key =
   let open Deferred.Result.Let_syntax in
   let command =
     match exist with
     | `Always -> command
     | `Only_if_exists -> Printf.sprintf "%sX" command
   in
-  match%bind request t ([command; key; element] @ elements) with
+  match%bind request t ([command; key] @ elements) with
   | Resp.Integer n -> return n
   | Resp.Error e when is_wrong_type e -> Deferred.return (Error (`Wrong_type key))
   | _ -> Deferred.return @@ Error `Unexpected
@@ -751,11 +751,9 @@ let rpop = omnidirectional_pop "RPOP"
 
 let lpop = omnidirectional_pop "LPOP"
 
-let hset t ~element ?(elements = []) key =
+let hset t ~elements key =
   let open Deferred.Result.Let_syntax in
-  let field_values =
-    element :: elements |> List.map ~f:(fun (f, v) -> [f; v]) |> List.concat
-  in
+  let field_values = elements |> List.map ~f:(fun (f, v) -> [f; v]) |> List.concat in
   match%bind request t (["HSET"; key] @ field_values) with
   | Resp.Integer n -> return n
   | _ -> Deferred.return @@ Error `Unexpected
@@ -766,31 +764,30 @@ let hget t ~field key =
   | Resp.Bulk v -> return v
   | _ -> Deferred.return @@ Error `Unexpected
 
-let hmget t ~fields key =
+let hmgetl t ~fields key =
   let open Deferred.Result.Let_syntax in
   match%bind request t (["HMGET"; key] @ fields) with
-  | Resp.Array xs -> (
-      let unpacked =
-        List.map2 fields xs ~f:(fun field ->
-          function
-          | Resp.Bulk v -> Ok (field, Some v)
-          | Resp.Null -> Ok (field, None)
-          | _ -> Error `Unexpected)
-      in
-      match unpacked with
-      | Ok matching -> (
-          let%bind all_bindings = Deferred.return @@ Result.all matching in
-          let bound_bindings =
-            List.filter_map all_bindings ~f:(fun (k, v) ->
-                match v with
-                | Some v -> Some (k, v)
-                | None -> None)
-          in
-          match String.Map.of_alist bound_bindings with
-          | `Ok t -> return t
-          | `Duplicate_key _ -> Deferred.return @@ Error `Unexpected)
-      | Unequal_lengths -> Deferred.return @@ Error `Unexpected)
+  | Resp.Array xs ->
+      Deferred.return
+      @@ Result.all
+           (List.map xs ~f:(function
+               | Resp.Bulk v -> Ok (Some v)
+               | Resp.Null -> Ok None
+               | _ -> Error `Unexpected))
   | _ -> Deferred.return @@ Error `Unexpected
+
+let hmget t ~fields key =
+  match%map hmgetl t ~fields key with
+  | Ok result -> (
+      match
+        List.fold2 fields result ~init:String.Map.empty ~f:(fun map key data ->
+            match data with
+            | None -> map
+            | Some data -> Map.add_exn ~key ~data map)
+      with
+      | Unequal_lengths -> Error `Unexpected
+      | Ok map -> Ok map)
+  | Error e -> Error e
 
 let hgetall t key =
   let open Deferred.Result.Let_syntax in

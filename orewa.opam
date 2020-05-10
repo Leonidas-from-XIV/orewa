@@ -28,8 +28,8 @@ depends: [
   "core" {>= "v0.11"}
   "dune" {>= "1.10"}
   "ppx_let" {>= "v0.11"}
-  "alcotest" {with-test & >= "0.8.4"}
-  "alcotest-async" {with-test & >= "0.8.2"}
+  "alcotest" {with-test & >= "1.0.0"}
+  "alcotest-async" {with-test & >= "1.0.0"}
   "fmt" {with-test & >= "0.8.6"}
   "ppx_deriving" {>= "4.2"}
 ]

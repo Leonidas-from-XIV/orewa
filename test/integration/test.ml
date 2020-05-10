@@ -32,6 +32,8 @@ let se = Alcotest.(result string err)
 
 let sle = Alcotest.(result (list string) err)
 
+let sole = Alcotest.(result (list (option string)) err)
+
 let soe = Alcotest.(result (option string) err)
 
 let some_string = Alcotest.testable String.pp (const (const true))
@@ -242,14 +244,15 @@ let test_lpush () =
   let key = random_key () in
   let not_list = random_key () in
   let element = "value" in
-  let%bind res = Orewa.lpush conn ~exist:`Only_if_exists ~element key in
+  let elements = [element] in
+  let%bind res = Orewa.lpush conn ~exist:`Only_if_exists ~elements key in
   Alcotest.(check ie) "LPUSHX to non-existing list" (Ok 0) res;
-  let%bind res = Orewa.lpush conn ~element key in
+  let%bind res = Orewa.lpush conn ~elements key in
   Alcotest.(check ie) "LPUSH to empty list" (Ok 1) res;
-  let%bind res = Orewa.lpush conn ~exist:`Always ~element key in
+  let%bind res = Orewa.lpush conn ~exist:`Always ~elements key in
   Alcotest.(check ie) "LPUSH to existing list" (Ok 2) res;
   let%bind _ = Orewa.set conn ~key:not_list element in
-  let%bind res = Orewa.lpush conn ~element not_list in
+  let%bind res = Orewa.lpush conn ~elements not_list in
   Alcotest.(check ie) "LPUSH to not a list" (Error (`Wrong_type not_list)) res;
   return ()
 
@@ -258,28 +261,29 @@ let test_rpush () =
   let key = random_key () in
   let not_list = random_key () in
   let element = "value" in
-  let%bind res = Orewa.rpush conn ~exist:`Only_if_exists ~element key in
+  let elements = [element] in
+  let%bind res = Orewa.rpush conn ~exist:`Only_if_exists ~elements key in
   Alcotest.(check ie) "RPUSHX to non-existing list" (Ok 0) res;
-  let%bind res = Orewa.rpush conn ~element key in
+  let%bind res = Orewa.rpush conn ~elements key in
   Alcotest.(check ie) "RPUSH to empty list" (Ok 1) res;
-  let%bind res = Orewa.rpush conn ~exist:`Always ~element key in
+  let%bind res = Orewa.rpush conn ~exist:`Always ~elements key in
   Alcotest.(check ie) "RPUSH to existing list" (Ok 2) res;
   let%bind _ = Orewa.set conn ~key:not_list element in
-  let%bind res = Orewa.rpush conn ~element not_list in
+  let%bind res = Orewa.rpush conn ~elements not_list in
   Alcotest.(check ie) "RPUSH to not a list" (Error (`Wrong_type not_list)) res;
   return ()
 
 let test_lpush_lrange () =
   Orewa.with_connection ~host @@ fun conn ->
   let key = random_key () in
-  let element = random_key () in
-  let element' = random_key () in
-  let%bind _ = Orewa.lpush conn ~element key in
-  let%bind _ = Orewa.lpush conn ~element:element' key in
+  let elements = [random_key ()] in
+  let elements' = [random_key ()] in
+  let%bind _ = Orewa.lpush conn ~elements key in
+  let%bind _ = Orewa.lpush conn ~elements:elements' key in
   let%bind res = Orewa.lrange conn ~key ~start:0 ~stop:(-1) in
   Alcotest.(check (result (list truncated_string) err))
     "LRANGE failed"
-    (Ok [element'; element])
+    (Ok (elements' @ elements))
     res;
   return ()
 
@@ -290,7 +294,7 @@ let test_large_lrange () =
   let values = 5 in
   let%bind expected =
     Deferred.List.init values ~f:(fun _ ->
-        let%bind _ = Orewa.lpush conn ~element key in
+        let%bind _ = Orewa.lpush conn ~elements:[element] key in
         return element)
   in
   let%bind res = Orewa.lrange conn ~key ~start:0 ~stop:(-1) in
@@ -303,9 +307,9 @@ let test_rpoplpush () =
   let destination = random_key () in
   let element = "three" in
   let not_list = random_key () in
-  let%bind _ = Orewa.rpush conn source ~element:"one" in
-  let%bind _ = Orewa.rpush conn source ~element:"two" in
-  let%bind _ = Orewa.rpush conn source ~element in
+  let%bind _ = Orewa.rpush conn source ~elements:["one"] in
+  let%bind _ = Orewa.rpush conn source ~elements:["two"] in
+  let%bind _ = Orewa.rpush conn source ~elements:[element] in
   let%bind res = Orewa.rpoplpush conn ~source ~destination in
   Alcotest.(check se) "RPOPLPUSH moved the correct element" (Ok element) res;
   let%bind _ = Orewa.set conn ~key:not_list element in
@@ -908,7 +912,7 @@ let test_sort () =
   in
   let%bind () =
     Deferred.List.iter randomly_ordered ~f:(fun value ->
-        let%bind _ = Orewa.lpush conn ~element:(string_of_int value) key in
+        let%bind _ = Orewa.lpush conn ~elements:[string_of_int value] key in
         return ())
   in
   let%bind res = Orewa.sort conn key in
@@ -974,7 +978,7 @@ let test_type' () =
   let list_key = random_key () in
   let missing_key = random_key () in
   let%bind _ = Orewa.set conn ~key:string_key "aaaa" in
-  let%bind _ = Orewa.lpush conn ~element:"aaaa" list_key in
+  let%bind _ = Orewa.lpush conn ~elements:["aaaa"] list_key in
   let%bind res = Orewa.type' conn string_key in
   Alcotest.(check soe) "Finds string" (Ok (Some "string")) res;
   let%bind res = Orewa.type' conn list_key in
@@ -1008,7 +1012,7 @@ let test_restore () =
   Alcotest.(check ue) "Restoring key" (Ok ()) res;
   let%bind res = Orewa.get conn new_key in
   Alcotest.(check soe) "Correct value restored" (Ok (Some element)) res;
-  let%bind _ = Orewa.lpush conn ~element list_key in
+  let%bind _ = Orewa.lpush conn ~elements:[element] list_key in
   let%bind res = Orewa.dump conn list_key in
   let dumped = Option.value_exn (Option.value_exn (Result.ok res)) in
   let%bind res = Orewa.restore conn ~key:new_key ~replace:true dumped in
@@ -1063,8 +1067,8 @@ let test_lindex () =
   let%bind _ = Orewa.set conn ~key:not_list "this is not a list" in
   let%bind res = Orewa.lindex conn key 0 in
   Alcotest.(check soe) "Get first element of not a list" (Ok None) res;
-  let%bind _ = Orewa.lpush conn ~element key in
-  let%bind _ = Orewa.lpush conn ~element:(random_key ()) key in
+  let%bind _ = Orewa.lpush conn ~elements:[element] key in
+  let%bind _ = Orewa.lpush conn ~elements:[random_key ()] key in
   let%bind res = Orewa.lindex conn key 1 in
   Alcotest.(check soe) "Get second element of non-empty list" (Ok (Some element)) res;
   return ()
@@ -1076,7 +1080,7 @@ let test_linsert () =
   let pivot = random_key () in
   let%bind res = Orewa.linsert conn ~key Orewa.Before ~element ~pivot in
   Alcotest.(check ie) "Insert into nonexisting list" (Ok 0) res;
-  let%bind _ = Orewa.lpush conn ~element:pivot key in
+  let%bind _ = Orewa.lpush conn ~elements:[pivot] key in
   let%bind res = Orewa.linsert conn ~key Orewa.Before ~element ~pivot in
   Alcotest.(check ie) "Insert before into existing list" (Ok 2) res;
   let%bind res = Orewa.linsert conn ~key Orewa.After ~element ~pivot in
@@ -1086,10 +1090,10 @@ let test_linsert () =
 let test_llen () =
   Orewa.with_connection ~host @@ fun conn ->
   let key = random_key () in
-  let element = random_key () in
+  let elements = [random_key ()] in
   let%bind res = Orewa.llen conn key in
   Alcotest.(check ie) "Lenght of nonexisting list" (Ok 0) res;
-  let%bind _ = Orewa.lpush conn ~element key in
+  let%bind _ = Orewa.lpush conn ~elements key in
   let%bind res = Orewa.llen conn key in
   Alcotest.(check ie) "Lenght of existing list" (Ok 1) res;
   return ()
@@ -1105,8 +1109,8 @@ let test_lpop () =
   let%bind _ = Orewa.set conn ~key:not_list "this is not a list" in
   let%bind res = Orewa.lpop conn not_list in
   Alcotest.(check soe) "Pop from not a list" (Error (`Wrong_type not_list)) res;
-  let%bind _ = Orewa.lpush conn ~element key in
-  let%bind _ = Orewa.lpush conn ~element:left_element key in
+  let%bind _ = Orewa.lpush conn ~elements:[element] key in
+  let%bind _ = Orewa.lpush conn ~elements:[left_element] key in
   let%bind res = Orewa.lpop conn key in
   Alcotest.(check soe) "Pop from existing list" (Ok (Some left_element)) res;
   return ()
@@ -1122,8 +1126,8 @@ let test_rpop () =
   let%bind _ = Orewa.set conn ~key:not_list "this is not a list" in
   let%bind res = Orewa.rpop conn not_list in
   Alcotest.(check soe) "Pop from not a list" (Error (`Wrong_type not_list)) res;
-  let%bind _ = Orewa.lpush conn ~element:right_element key in
-  let%bind _ = Orewa.lpush conn ~element key in
+  let%bind _ = Orewa.lpush conn ~elements:[right_element] key in
+  let%bind _ = Orewa.lpush conn ~elements:[element] key in
   let%bind res = Orewa.rpop conn key in
   Alcotest.(check soe) "Pop from existing list" (Ok (Some right_element)) res;
   return ()
@@ -1132,11 +1136,12 @@ let test_lrem () =
   Orewa.with_connection ~host @@ fun conn ->
   let key = random_key () in
   let element = random_key () in
-  let%bind _ = Orewa.lpush conn key ~element in
-  let%bind _ = Orewa.lpush conn key ~element in
-  let%bind _ = Orewa.lpush conn key ~element:"SPACER" in
-  let%bind _ = Orewa.lpush conn key ~element in
-  let%bind _ = Orewa.lpush conn key ~element in
+  let elements = [element] in
+  let%bind _ = Orewa.lpush conn key ~elements in
+  let%bind _ = Orewa.lpush conn key ~elements in
+  let%bind _ = Orewa.lpush conn key ~elements:["SPACER"] in
+  let%bind _ = Orewa.lpush conn key ~elements in
+  let%bind _ = Orewa.lpush conn key ~elements in
   let%bind res = Orewa.lrem conn ~key 1 ~element in
   Alcotest.(check ie) "Removing first occurence" (Ok 1) res;
   let%bind res = Orewa.lrem conn ~key 1 ~element in
@@ -1155,7 +1160,7 @@ let test_lset () =
   let element = random_key () in
   let%bind res = Orewa.lset conn ~key 0 ~element in
   Alcotest.(check ue) "Setting nonexistent list" (Error (`No_such_key key)) res;
-  let%bind _ = Orewa.lpush conn key ~element in
+  let%bind _ = Orewa.lpush conn key ~elements:[element] in
   let%bind res = Orewa.lset conn ~key 0 ~element in
   Alcotest.(check ue) "Setting existent index of list" (Ok ()) res;
   let%bind res = Orewa.lset conn ~key 1 ~element in
@@ -1168,10 +1173,10 @@ let test_lset () =
 let test_ltrim () =
   Orewa.with_connection ~host @@ fun conn ->
   let key = random_key () in
-  let element = random_key () in
-  let elements = 10 in
+  let elements = [random_key ()] in
+  let element_count = 10 in
   let%bind _ =
-    List.init elements ~f:(fun _ -> Orewa.lpush conn key ~element) |> Deferred.all
+    List.init element_count ~f:(fun _ -> Orewa.lpush conn key ~elements) |> Deferred.all
   in
   let%bind res = Orewa.ltrim conn ~start:0 ~end':4 key in
   Alcotest.(check ue) "Trimming list" (Ok ()) res;
@@ -1187,16 +1192,15 @@ let test_hset () =
     let value = random_key () in
     field, value
   in
-  let element = random_element () in
-  let%bind res = Orewa.hset conn ~element key in
+  let elements = [random_element ()] in
+  let%bind res = Orewa.hset conn ~elements key in
   Alcotest.(check ie) "Set single element" (Ok 1) res;
-  let%bind res = Orewa.hset conn ~element key in
+  let%bind res = Orewa.hset conn ~elements key in
   Alcotest.(check ie) "Resetting is no-op" (Ok 0) res;
   let%bind res =
     Orewa.hset
       conn
-      ~element:(random_element ())
-      ~elements:[random_element (); random_element ()]
+      ~elements:[random_element (); random_element (); random_element ()]
       key
   in
   Alcotest.(check ie) "Set multiple elements" (Ok 3) res;
@@ -1207,8 +1211,8 @@ let test_hget () =
   let key = random_key () in
   let field = random_key () in
   let value = random_key () in
-  let element = field, value in
-  let%bind _ = Orewa.hset conn ~element key in
+  let elements = [field, value] in
+  let%bind _ = Orewa.hset conn ~elements key in
   let%bind res = Orewa.hget conn ~field key in
   Alcotest.(check se) "Getting the value that was set" (Ok value) res;
   return ()
@@ -1222,10 +1226,24 @@ let test_hmget () =
   let%bind res = Orewa.hmget conn ~fields:[field] key in
   let expected = String.Map.of_alist_exn [] in
   Alcotest.(check sme) "Getting empty key" (Ok expected) res;
-  let%bind _ = Orewa.hset conn ~element key in
+  let%bind _ = Orewa.hset conn ~elements:[element] key in
   let%bind res = Orewa.hmget conn ~fields:[field] key in
   let expected = String.Map.of_alist_exn [element] in
   Alcotest.(check sme) "Getting the value that was set" (Ok expected) res;
+  return ()
+
+let test_hmgetl () =
+  Orewa.with_connection ~host @@ fun conn ->
+  let key = random_key () in
+  let field1 = random_key () in
+  let value1 = random_key () in
+  let field2 = random_key () in
+  let value2 = random_key () in
+  let field3 = random_key () in
+  let%bind _ = Orewa.hset conn ~elements:[field1, value1; field2, value2] key in
+  let%bind res = Orewa.hmgetl conn ~fields:[field1; field2; field3] key in
+  let expected = [Some value1; Some value2; None] in
+  Alcotest.(check sole) "Getting the value that was set" (Ok expected) res;
   return ()
 
 let test_hgetall () =
@@ -1237,7 +1255,7 @@ let test_hgetall () =
   let field = random_key () in
   let value = random_key () in
   let element = field, value in
-  let%bind _ = Orewa.hset conn ~element key in
+  let%bind _ = Orewa.hset conn ~elements:[element] key in
   let%bind res = Orewa.hgetall conn key in
   let expected = String.Map.of_alist_exn [element] in
   Alcotest.(check sme) "Getting a map of elements" (Ok expected) res;
@@ -1255,7 +1273,7 @@ let test_hdel () =
   let element' = field', value in
   let field'' = random_key () in
   let element'' = field'', value in
-  let%bind _ = Orewa.hset conn ~element ~elements:[element'; element''] key in
+  let%bind _ = Orewa.hset conn ~elements:[element; element'; element''] key in
   let%bind res = Orewa.hdel conn ~field key in
   Alcotest.(check ie) "Single delete from filled hashtable" (Ok 1) res;
   let%bind res = Orewa.hdel conn ~field:field' ~fields:[field''] key in
@@ -1267,10 +1285,10 @@ let test_hexists () =
   let key = random_key () in
   let field = random_key () in
   let value = random_key () in
-  let element = field, value in
+  let elements = [field, value] in
   let%bind res = Orewa.hexists conn ~field key in
   Alcotest.(check be) "Asking for nonexisting field on missing key" (Ok false) res;
-  let%bind _ = Orewa.hset conn ~element key in
+  let%bind _ = Orewa.hset conn ~elements key in
   let%bind res = Orewa.hexists conn ~field key in
   Alcotest.(check be) "Asking for existing key" (Ok true) res;
   let%bind _ = Orewa.hdel conn ~field key in
@@ -1305,10 +1323,10 @@ let test_hkeys () =
   let key = random_key () in
   let field = random_key () in
   let value = random_key () in
-  let element = field, value in
+  let elements = [field, value] in
   let%bind res = Orewa.hkeys conn key in
   Alcotest.(check sle) "Empty hash map" (Ok []) res;
-  let%bind _ = Orewa.hset conn ~element key in
+  let%bind _ = Orewa.hset conn ~elements key in
   let%bind res = Orewa.hkeys conn key in
   Alcotest.(check sle) "Enumerating existing key" (Ok [field]) res;
   return ()
@@ -1318,10 +1336,10 @@ let test_hvals () =
   let key = random_key () in
   let field = random_key () in
   let value = random_key () in
-  let element = field, value in
+  let elements = [field, value] in
   let%bind res = Orewa.hvals conn key in
   Alcotest.(check sle) "Empty hash map" (Ok []) res;
-  let%bind _ = Orewa.hset conn ~element key in
+  let%bind _ = Orewa.hset conn ~elements key in
   let%bind res = Orewa.hvals conn key in
   Alcotest.(check sle) "Enumerating existing key" (Ok [value]) res;
   return ()
@@ -1331,10 +1349,10 @@ let test_hlen () =
   let key = random_key () in
   let field = random_key () in
   let value = random_key () in
-  let element = field, value in
+  let elements = [field, value] in
   let%bind res = Orewa.hlen conn key in
   Alcotest.(check ie) "Empty hash map" (Ok 0) res;
-  let%bind _ = Orewa.hset conn ~element key in
+  let%bind _ = Orewa.hset conn ~elements key in
   let%bind res = Orewa.hlen conn key in
   Alcotest.(check ie) "Map with fields" (Ok 1) res;
   return ()
@@ -1344,10 +1362,10 @@ let test_hstrlen () =
   let key = random_key () in
   let field = random_key () in
   let value = random_key () in
-  let element = field, value in
+  let elements = [field, value] in
   let%bind res = Orewa.hstrlen conn ~field key in
   Alcotest.(check ie) "Empty hash map" (Ok 0) res;
-  let%bind _ = Orewa.hset conn ~element key in
+  let%bind _ = Orewa.hset conn ~elements key in
   let%bind res = Orewa.hstrlen conn ~field key in
   Alcotest.(check ie) "Map with a field" (Ok (String.length value)) res;
   return ()
@@ -1360,7 +1378,7 @@ let test_hscan () =
     List.init count ~f:(fun i ->
         String.concat ~sep:":" ["mem"; string_of_int i], random_key ())
   in
-  let%bind _ = Orewa.hset conn key ~element:("dummy", "whatever") ~elements in
+  let%bind _ = Orewa.hset conn key ~elements:(("dummy", "whatever") :: elements) in
   let pattern = "mem:*" in
   let pipe = Orewa.hscan conn ~pattern ~count:4 key in
   let%bind q = Pipe.read_all pipe in
@@ -1455,6 +1473,7 @@ let tests =
       test_case "HSET" `Slow test_hset;
       test_case "HGET" `Slow test_hget;
       test_case "HMGET" `Slow test_hmget;
+      test_case "HMGETL" `Slow test_hmgetl;
       test_case "HGETALL" `Slow test_hgetall;
       test_case "HDEL" `Slow test_hdel;
       test_case "HEXISTS" `Slow test_hexists;
@@ -1467,6 +1486,8 @@ let tests =
       test_case "HSCAN" `Slow test_hscan;
       test_case "PUBLISH" `Slow test_publish ]
 
+let run () = Alcotest_async.run Caml.__MODULE__ ["integration", tests]
+
 let () =
   Log.Global.set_level `Debug;
-  Alcotest.run Caml.__MODULE__ ["integration", tests]
+  Thread_safe.block_on_async_exn run
