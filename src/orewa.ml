@@ -763,7 +763,8 @@ let hset t ~element ?(elements = []) key =
 let hget t ~field key =
   let open Deferred.Result.Let_syntax in
   match%bind request t ["HGET"; key; field] with
-  | Resp.Bulk v -> return v
+  | Resp.Bulk v -> return (Some v)
+  | Resp.Null -> return None
   | _ -> Deferred.return @@ Error `Unexpected
 
 let hmgetl t ~fields key =

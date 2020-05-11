@@ -339,7 +339,11 @@ val hset
   string ->
   (int, [> common_error]) Deferred.Result.t
 
-val hget : t -> field:string -> string -> (string, [> common_error]) Deferred.Result.t
+val hget
+  :  t ->
+  field:string ->
+  string ->
+  (string option, [> common_error]) Deferred.Result.t
 
 val hmget
   :  t ->

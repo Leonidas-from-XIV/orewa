@@ -123,6 +123,8 @@ let test_get () =
   let%bind _ = Orewa.set conn ~key value in
   let%bind res = Orewa.get conn key in
   Alcotest.(check soe) "Correct response" (Ok (Some value)) res;
+  let%bind res = Orewa.get conn (random_key ()) in
+  Alcotest.(check soe) "Nonexistent key" (Ok None) res;
   return ()
 
 let test_getset () =
@@ -1212,7 +1214,9 @@ let test_hget () =
   let element = field, value in
   let%bind _ = Orewa.hset conn ~element key in
   let%bind res = Orewa.hget conn ~field key in
-  Alcotest.(check se) "Getting the value that was set" (Ok value) res;
+  Alcotest.(check soe) "Getting the value that was set" (Ok (Some value)) res;
+  let%bind res = Orewa.hget conn ~field:(random_key ()) key in
+  Alcotest.(check soe) "Getting a nonexistent value" (Ok None) res;
   return ()
 
 let test_hmget () =
